@@ -54,4 +54,61 @@
 
 * **记住**：如果一个逻辑是“某个对象自己就能决定的”（比如：判断订单是否可以取消），请写在 `domain`；如果这个逻辑需要“调动好几个模块协同”（比如：取消订单后退款并通知用户），请写在 `application`。
 
-**你现在是准备先从 `common` 层的通用返回对象开始写，还是先定义 `auth` 模块的数据库表结构？**
+├─.idea
+├─.mvn
+│  └─wrapper
+├─docker
+├─docs
+│  ├─architecture
+│  └─db-design
+├─src
+│  ├─main
+│  │  ├─java
+│  │  │  └─com
+│  │  │      └─example
+│  │  │          └─biddoc
+│  │  │              ├─audit
+│  │  │              │  ├─api
+│  │  │              │  ├─application
+│  │  │              │  ├─domain
+│  │  │              │  └─infrastructure
+│  │  │              ├─auth
+│  │  │              │  ├─api
+│  │  │              │  ├─application
+│  │  │              │  ├─domain
+│  │  │              │  └─infrastructure
+│  │  │              ├─common
+│  │  │              │  ├─config
+│  │  │              │  ├─constant
+│  │  │              │  ├─exception
+│  │  │              │  ├─result
+│  │  │              │  └─util
+│  │  │              ├─document
+│  │  │              │  ├─api
+│  │  │              │  ├─application
+│  │  │              │  ├─domain
+│  │  │              │  └─infrastructure
+│  │  │              ├─folder
+│  │  │              │  ├─api
+│  │  │              │  ├─application
+│  │  │              │  ├─domain
+│  │  │              │  └─infrastructure
+│  │  │              ├─notify
+│  │  │              │  ├─api
+│  │  │              │  ├─application
+│  │  │              │  ├─domain
+│  │  │              │  └─infrastructure
+│  │  │              └─workflow
+│  │  │                  ├─api
+│  │  │                  ├─application
+│  │  │                  ├─domain
+│  │  │                  └─infrastructure
+│  │  └─resources
+│  │      ├─mapper
+│  │      ├─static
+│  │      └─templates
+│  └─test
+│      └─java
+│          └─com
+│              └─example
+│                  └─biddoc

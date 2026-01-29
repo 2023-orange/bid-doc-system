@@ -1,0 +1,51 @@
+关键业务规则（必须由后端保证）
+规则	说明
+用户必须属于二级部门	校验 department.level
+一个部门最多一个 MANAGER	注册 / 修改时校验
+禁用用户不可登录	登录逻辑
+禁用部门不可注册	注册逻辑
+用户删除使用软删除	deleted = true
+
+查询性能
+
+登录：username + deleted
+
+用户列表：department_id + status
+
+审批流：job_level
+
+与 Spring Boot / JPA 的适配建议
+
+ID 使用 @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+job_level 建议使用 Enum
+
+deleted 使用 @Where(clause = "deleted = false")
+
+department 用 @ManyToOne(fetch = LAZY)
+
+1.	api (用户接口层):
+o	DTO (Data Transfer Object): 接收前端参数。
+o	Controller: 仅做参数校验、调用 Application Service、封装统一响应结果。
+2.	Application (应用层):
+o	Service 接口与实现：编排业务流程，不包含核心业务规则，只负责“指挥”。
+o	Convertor: DTO 转 Entity。
+3.	Domain (领域层 - 核心):
+o	Entity: 充血模型，包含业务逻辑（如 order.pay()），而不仅仅是 Getter/Setter。
+o	Repository Interface: 定义数据访问接口（实现放在 Infrastructure 层）。
+o	Domain Event: 领域事件定义（用于解耦）。
+4.	Infrastructure (基础设施层实现):
+o	Mapper/Repository Impl: 具体 SQL 实现。
+3. 健全性设计 (Robustness)
+3.1 统一响应与异常处理
+•	Result 包装器：所有 API 必须返回统一格式 { code, message, data, traceId }。
+•	GlobalExceptionHandler：
+o	捕获 BusinessException（自定义业务异常）：返回对应的错误码。
+o	捕获 MethodArgumentNotValidException（参数校验失败）：返回前端友好的提示。
+o	捕获 Exception（兜底）：记录 ERROR 级别日志（包含堆栈和 traceId），并返回“系统繁忙”。
+3.2 参数校验 (Validation)
+•	严禁在 Service 层写大量的 if (name == null)。
+•	必须在 Controller 层使用 JSR-303 (@NotNull, @Size, @Pattern) 注解。
+•	复杂校验使用自定义注解或 Group Sequence。
+
+所有表必须包含 create_time, update_time, create_by, update_by，由 MyBatis-Plus 自动填充。
