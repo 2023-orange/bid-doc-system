@@ -1,9 +1,84 @@
+server:
+  port: 8080
+
 spring:
+  application:
+    name: bid-doc-system
   profiles:
     active: dev
 
+  # ===================================================================
+  # 数据库配置 (PostgreSQL)
+  # ===================================================================
   datasource:
-    url: jdbc:mysql://localhost:3306/bid_doc?useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
+    # PostgreSQL 默认端口 5432，不需要 useSSL 和 serverTimezone 参数
+    url: jdbc:postgresql://localhost:5432/bid_doc_system
+    # PostgreSQL 默认超级管理员是 postgres，如果你的用户名是 root 请自行修改
+    username: postgres
+    password: "1305174214"
+
+  # ===================================================================
+  # Redis 配置
+  # ===================================================================
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      # 如果有密码取消注释
+      # password:
+
+  # ===================================================================
+  # MVC 异常处理配置
+  # ===================================================================
+  mvc:
+    # 核心配置：当找不到 Handler 时抛出 NoHandlerFoundException 异常
+    # 只有开启这个，GlobalExceptionHandler 中的 handle404 才能生效
+    throw-exception-if-no-handler-found: true
+
+    # 解决静态资源路径匹配问题 (Spring Boot 2.6+ 默认是 path_pattern_parser)
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+  web:
+    resources:
+      # 【关键】这里必须为 true (默认) 或者不写。
+      # 如果设为 false，Knife4j/Swagger 的 doc.html 页面将无法加载 (报 404)
+      add-mappings: true
+
+# ===================================================================
+# MyBatis Plus 配置
+# ===================================================================
+mybatis-plus:
+  configuration:
+    # 开启驼峰命名转换 (bid_doc_id -> bidDocId)
+    map-underscore-to-camel-case: true
+    # 开发环境开启 SQL 日志打印，方便调试
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 逻辑删除字段 (0:未删除, 1:已删除)
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+## ===================================================================
+## Knife4j (Swagger) 接口文档配置
+## ===================================================================
+#knife4j:
+#  enable: true
+#  openapi:
+#    title: 文档管理系统 API 文档
+##    description: 统一异常处理与基础架构测试
+##    email: admin@example.com
+#    concat: 管理员
+#    url: https://example.com
+#    version: v1.0.0
+#    group:
+#      default:
+#        group-name: 默认分组
+#        api-rule: package
+#        # 这里要改成你实际的 Controller 包路径
+#        api-rule-resources:
+#          - com.example.biddoc.controller

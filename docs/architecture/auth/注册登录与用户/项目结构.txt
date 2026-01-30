@@ -1,0 +1,28 @@
+common/
+├── config/
+│   ├── WebMvcConfig.java          # 拦截器注册
+│   └── JacksonConfig.java         # JSON 统一配置
+│
+├── constant/
+│   ├── HeaderConstants.java
+│   └── UserConstants.java
+│
+├── exception/
+│   ├── GlobalExceptionHandler.java
+│   ├── BusinessException.java
+│   ├── ErrorCode.java
+│
+├── interceptor/
+│   ├── LoggingInterceptor.java
+│   ├── AuthInterceptor.java
+│   └── TokenInterceptor.java
+│
+├── result/
+│   ├── ApiResponse.java
+│   └── PageResponse.java
+│
+├── util/
+│   ├── JwtUtil.java
+│   ├── AssertUtil.java
+│
+

@@ -14,15 +14,7 @@
 
 审批流：job_level
 
-与 Spring Boot / JPA 的适配建议
 
-ID 使用 @GeneratedValue(strategy = GenerationType.IDENTITY)
-
-job_level 建议使用 Enum
-
-deleted 使用 @Where(clause = "deleted = false")
-
-department 用 @ManyToOne(fetch = LAZY)
 
 1.	api (用户接口层):
 o	DTO (Data Transfer Object): 接收前端参数。
