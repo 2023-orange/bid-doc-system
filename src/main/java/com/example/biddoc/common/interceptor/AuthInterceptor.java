@@ -15,6 +15,11 @@ public class AuthInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request,
                              HttpServletResponse response,
                              Object handler) {
+        // 【关键修复】如果是 OPTIONS 请求，直接放行，不校验 Token
+        // 这是跨域预检请求，浏览器自动发送，不会带 Token
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
 
         UserContext.UserInfo user = UserContext.get();
         if (user == null || !user.isAdmin()) {

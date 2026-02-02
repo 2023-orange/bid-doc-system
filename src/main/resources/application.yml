@@ -46,7 +46,9 @@ spring:
       # 【关键】这里必须为 true (默认) 或者不写。
       # 如果设为 false，Knife4j/Swagger 的 doc.html 页面将无法加载 (报 404)
       add-mappings: true
-
+  logging:
+    pattern:
+      console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
 # ===================================================================
 # MyBatis Plus 配置
 # ===================================================================
@@ -60,8 +62,10 @@ mybatis-plus:
     db-config:
       # 逻辑删除字段 (0:未删除, 1:已删除)
       logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+      # 逻辑已删除值 (Postgres 使用字符串 'true')
+      logic-delete-value: "true"
+      # 逻辑未删除值 (Postgres 使用字符串 'false')
+      logic-not-delete-value: "false"
 
 ## ===================================================================
 ## Knife4j (Swagger) 接口文档配置

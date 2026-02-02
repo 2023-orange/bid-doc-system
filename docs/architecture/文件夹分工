@@ -112,3 +112,20 @@
 │          └─com
 │              └─example
 │                  └─biddoc
+
+
+─auth
+    │              │  ├─api
+    │              │  │  ├─controller
+    │              │  │  └─dto
+    │              │  │      ├─req
+    │              │  │      └─resp
+    │              │  ├─application
+    │              │  │  ├─Convertor
+    │              │  │  └─service
+    │              │  │      └─impl
+    │              │  ├─domain
+    │              │  │  ├─enity
+    │              │  │  └─repository
+    │              │  └─infrastructure
+    │              │      └─mapper

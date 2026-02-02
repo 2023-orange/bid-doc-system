@@ -80,8 +80,10 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <version>1.18.32</version>
+            <scope>provided</scope>
         </dependency>
+
 
         <!-- Knife4j (Swagger 增强版, 接口文档) -->
         <dependency>
@@ -112,28 +114,73 @@
         <!-- ================================================= -->
         <!-- 测试 -->
         <!-- ================================================= -->
+        <!-- 单元测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Mockito -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- H2 用于集成测试 -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <!-- JaCoCo 覆盖率插件 -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.8</version>
+                <executions>
+
+                    <!-- 准备 agent -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- 生成报告 -->
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+
+                </executions>
+            </plugin>
             <!-- 编译器插件 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
                 <configuration>
+                    <release>17</release>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
+                            <version>1.18.32</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+
             <!-- Spring Boot 打包插件 -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>

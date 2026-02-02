@@ -26,6 +26,9 @@ public class DepartmentController {
             @Valid @RequestBody DepartmentCreateReqDTO req) {
 
         SysDepartment dept = DepartmentConvertor.toEntity(req);
+//        // 临时手动赋值进行测试
+//        dept.setCreatedBy("test");
+//        dept.setUpdatedBy("test");
         departmentService.create(dept);
         return ApiResponse.success();
     }
