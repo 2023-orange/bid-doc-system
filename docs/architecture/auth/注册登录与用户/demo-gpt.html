@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云深文档 - 流程审批增强版原型</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0091ff;
+            --bg-color: #f5f7fa;
+            --sidebar-width: 240px;
+            --header-height: 60px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            overflow: hidden; 
+            height: 100vh;
+        }
+
+        /* 通用样式 */
+        .cursor-pointer { cursor: pointer; }
+        .text-primary-hover:hover { color: #0056b3 !important; text-decoration: underline; }
+        
+        /* 布局框架 */
+        #app-layout { display: flex; height: 100vh; }
+        
+        /* 侧边栏 */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: #fff;
+            border-right: 1px solid #e9ecef;
+            display: flex; flex-direction: column;
+            z-index: 100;
+        }
+        .logo-area {
+            height: var(--header-height);
+            display: flex; align-items: center; padding-left: 20px;
+            color: var(--primary-color); font-weight: bold; font-size: 1.3rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .nav-menu { flex: 1; padding: 15px 0; overflow-y: auto; }
+        .nav-group-title { padding: 10px 24px 5px; font-size: 0.8rem; color: #999; margin-top: 10px; }
+        .nav-item {
+            padding: 12px 24px; cursor: pointer; color: #555;
+            display: flex; align-items: center; transition: all 0.2s;
+            text-decoration: none;
+        }
+        .nav-item:hover { background-color: #f8f9fa; color: var(--primary-color); }
+        .nav-item.active { background-color: #e6f7ff; color: var(--primary-color); border-right: 3px solid var(--primary-color); }
+        .nav-item i { width: 24px; text-align: center; margin-right: 8px; }
+
+        /* 主区域 */
+        .main-content {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+        .top-header {
+            height: var(--header-height); background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .content-body { flex: 1; padding: 20px; overflow-y: auto; overflow-x: hidden; }
+
+        /* 页面切换控制 */
+        .page-section { display: none; animation: fadeIn 0.3s; }
+        .page-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- 1. 流程中心样式 --- */
+        .task-card {
+            background: #fff; border-radius: 8px; padding: 20px;
+            border-left: 4px solid var(--primary-color);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            margin-bottom: 15px; transition: transform 0.2s; cursor: pointer;
+        }
+        .task-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        
+        /* --- 2. 审批详情页样式 (左右分栏) --- */
+        .approval-layout { display: flex; height: calc(100vh - 80px); gap: 20px; }
+        .doc-preview-pane {
+            flex: 1; background: #525659; border-radius: 8px; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .approval-sidebar {
+            width: 380px; background: #fff; border-radius: 8px;
+            display: flex; flex-direction: column;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+        }
+        .timeline-item {
+            position: relative; padding-left: 30px; margin-bottom: 20px;
+        }
+        .timeline-item::before {
+            content: ''; position: absolute; left: 8px; top: 5px; bottom: -25px;
+            width: 2px; background: #e9ecef;
+        }
+        .timeline-item:last-child::before { display: none; }
+        .timeline-dot {
+            position: absolute; left: 0; top: 5px;
+            width: 18px; height: 18px; border-radius: 50%;
+            background: #fff; border: 2px solid var(--primary-color);
+        }
+        .timeline-dot.success { border-color: #52c41a; background: #52c41a; }
+        
+        /* --- 3. 流程设计器样式 --- */
+        .flow-canvas {
+            background-color: #f4f6f8;
+            background-image: radial-gradient(#dfe2e5 1px, transparent 1px);
+            background-size: 20px 20px;
+            height: 600px; border-radius: 8px; border: 1px solid #e0e0e0;
+            position: relative; overflow: auto; padding: 50px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .flow-node {
+            width: 220px; background: #fff; border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative; margin-bottom: 60px;
+            border-top: 4px solid var(--primary-color);
+            transition: all 0.3s; cursor: pointer;
+        }
+        .flow-node:hover { box-shadow: 0 0 0 2px var(--primary-color); }
+        .flow-node::after {
+            content: ''; position: absolute; bottom: -60px; left: 50%;
+            width: 2px; height: 60px; background: #ccc;
+            transform: translateX(-50%);
+            z-index: 0;
+        }
+        .flow-node:last-child { margin-bottom: 0; }
+        .flow-node:last-child::after { display: none; }
+        .flow-arrow {
+            position: absolute; bottom: -12px; left: 50%;
+            transform: translateX(-50%); color: #ccc; z-index: 1;
+        }
+        .node-add-btn {
+            position: absolute; bottom: -35px; left: 50%;
+            transform: translateX(-50%); z-index: 2;
+            width: 24px; height: 24px; background: #fff;
+            border: 1px solid var(--primary-color); color: var(--primary-color);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; cursor: pointer;
+        }
+        
+    </style>
+</head>
+<body>
+
+    <!-- 主布局 -->
+    <div id="app-layout">
+        <!-- 侧边导航 -->
+        <nav class="sidebar">
+            <div class="logo-area">
+                <i class="fas fa-cube me-2"></i> 云深文档管理
+            </div>
+            <div class="nav-menu">
+                <div class="nav-item active" onclick="navTo('home', this)">
+                    <i class="fas fa-home"></i> 首页看板
+                </div>
+                <div class="nav-item" onclick="navTo('files', this)">
+                    <i class="fas fa-folder-open"></i> 文档管理
+                </div>
+                <div class="nav-item" onclick="navTo('workflow', this)">
+                    <i class="fas fa-check-circle"></i> 流程中心 <span class="badge bg-danger ms-auto rounded-pill">2</span>
+                </div>
+                <div class="nav-item" onclick="navTo('my', this)">
+                    <i class="fas fa-user"></i> 个人中心
+                </div>
+                
+                <div class="nav-group-title">系统管理</div>
+                <div class="nav-item" onclick="navTo('process-design', this)">
+                    <i class="fas fa-project-diagram"></i> 流程模板设计
+                </div>
+                <div class="nav-item" onclick="navTo('admin', this)">
+                    <i class="fas fa-cogs"></i> 系统控制台
+                </div>
+            </div>
+        </nav>
+
+        <!-- 内容区域 -->
+        <main class="main-content">
+            <!-- 顶部栏 -->
+            <header class="top-header">
+                <div class="text-muted"><i class="fas fa-bars me-2"></i> 集团总部 / 研发中心</div>
+                <div class="d-flex align-items-center">
+                    <button class="btn btn-primary btn-sm me-3" onclick="navTo('files')"><i class="fas fa-plus"></i> 上传文件</button>
+                    <div class="me-3 cursor-pointer position-relative">
+                        <i class="fas fa-bell fa-lg text-secondary"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
+                    </div>
+                    <div class="dropdown">
+                        <span class="dropdown-toggle cursor-pointer" data-bs-toggle="dropdown">
+                            <img src="https://ui-avatars.com/api/?name=Admin&background=0091ff&color=fff" class="rounded-circle" width="32">
+                            <span class="ms-1 small">超级管理员</span>
+                        </span>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#">设置</a></li>
+                            <li><a class="dropdown-item" href="#">退出</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-body">
+                
+                <!-- 1. 首页 -->
+                <div id="page-home" class="page-section active">
+                    <div class="row g-3">
+                        <!-- 待办任务快速入口 -->
+                        <div class="col-md-8">
+                            <div class="card border-0 shadow-sm mb-4">
+                                <div class="card-body">
+                                    <h5 class="card-title mb-3"><i class="fas fa-tasks text-primary me-2"></i>我的待办</h5>
+                                    <div class="list-group list-group-flush">
+                                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center cursor-pointer" onclick="openApprovalDetail('技术白皮书_v2.pdf')">
+                                            <div>
+                                                <span class="badge bg-warning text-dark me-2">审批中</span>
+                                                <i class="fas fa-file-pdf text-danger me-2"></i> 
+                                                <strong>技术白皮书_v2.pdf</strong> - 上传审批
+                                                <div class="small text-muted mt-1">申请人：李四 (研发部) | 当前节点：部门经理审批</div>
+                                            </div>
+                                            <button class="btn btn-outline-primary btn-sm">去处理</button>
+                                        </div>
+                                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center cursor-pointer" onclick="openApprovalDetail('2026年度预算表.xlsx')">
+                                            <div>
+                                                <span class="badge bg-warning text-dark me-2">审批中</span>
+                                                <i class="fas fa-file-excel text-success me-2"></i> 
+                                                <strong>2026年度预算表.xlsx</strong> - 扩展属性变更
+                                            </div>
+                                            <button class="btn btn-outline-primary btn-sm">去处理</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 快捷入口 -->
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card border-0 shadow-sm h-100 p-3 text-center cursor-pointer" onclick="navTo('process-design')">
+                                        <div class="py-3">
+                                            <i class="fas fa-bezier-curve fa-2x text-info mb-2"></i>
+                                            <h6>自定义流程模板</h6>
+                                            <small class="text-muted">配置审批流、设置节点权限</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card border-0 shadow-sm h-100 p-3 text-center cursor-pointer" onclick="navTo('workflow')">
+                                        <div class="py-3">
+                                            <i class="fas fa-history fa-2x text-success mb-2"></i>
+                                            <h6>审批历史记录</h6>
+                                            <small class="text-muted">查看所有流转日志</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 统计 -->
+                        <div class="col-md-4">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-body text-center">
+                                    <h6>本周文档统计</h6>
+                                    <div class="my-3">
+                                        <h2 class="text-primary">128</h2>
+                                        <small class="text-muted">新增文档</small>
+                                    </div>
+                                    <div class="row small">
+                                        <div class="col-6 border-end">上传审批: 12</div>
+                                        <div class="col-6">版本升级: 4</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 文档管理 (带状态链接) -->
+                <div id="page-files" class="page-section">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white py-3">
+                            <div class="d-flex justify-content-between">
+                                <h5 class="mb-0">文档列表 / 研发部</h5>
+                                <div>
+                                    <input type="text" class="form-control form-control-sm d-inline-block w-auto" placeholder="搜索文件...">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th class="ps-4">文件名</th>
+                                        <th>大小</th>
+                                        <th>状态 (19)</th>
+                                        <th>上传人</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="ps-4">
+                                            <i class="fas fa-file-pdf text-danger me-2"></i> 技术白皮书_v2.pdf
+                                            <span class="badge bg-light text-dark border ms-2">V2.0</span>
+                                        </td>
+                                        <td>4.2 MB</td>
+                                        <td>
+                                            <!-- 点击状态直接跳转到审批页 -->
+                                            <span class="badge bg-warning text-dark cursor-pointer" onclick="openApprovalDetail('技术白皮书_v2.pdf')">
+                                                <i class="fas fa-spinner fa-spin me-1"></i> 审批中
+                                            </span>
+                                        </td>
+                                        <td>李四</td>
+                                        <td>
+                                            <button class="btn btn-link btn-sm text-secondary"><i class="fas fa-eye"></i></button>
+                                            <button class="btn btn-link btn-sm text-secondary"><i class="fas fa-download"></i></button>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="ps-4">
+                                            <i class="fas fa-file-word text-primary me-2"></i> 产品需求规格书.docx
+                                        </td>
+                                        <td>1.8 MB</td>
+                                        <td><span class="badge bg-success">已归档</span></td>
+                                        <td>王五</td>
+                                        <td>
+                                            <button class="btn btn-link btn-sm text-secondary"><i class="fas fa-eye"></i></button>
+                                            <button class="btn btn-link btn-sm text-secondary"><i class="fas fa-download"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 流程中心 (Workflow Center) -->
+                <div id="page-workflow" class="page-section">
+                    <h4 class="mb-3">流程中心</h4>
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white">
+                            <ul class="nav nav-tabs card-header-tabs" id="workflowTabs">
+                                <li class="nav-item">
+                                    <a class="nav-link active" href="#" onclick="switchTab('todo')">待办任务 (2)</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="#" onclick="switchTab('myreq')">我发起的</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="#" onclick="switchTab('done')">已办结</a>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="card-body">
+                            <!-- 待办列表 -->
+                            <div id="tab-todo">
+                                <div class="task-card" onclick="openApprovalDetail('技术白皮书_v2.pdf')">
+                                    <div class="d-flex justify-content-between">
+                                        <h5 class="text-primary mb-1">文件上传审批：技术白皮书_v2.pdf</h5>
+                                        <span class="text-muted small">2026-02-03 09:30</span>
+                                    </div>
+                                    <div class="row mt-2 text-secondary small">
+                                        <div class="col-md-3">发起人：李四</div>
+                                        <div class="col-md-3">所属部门：研发部</div>
+                                        <div class="col-md-3">当前环节：<span class="text-warning">部门经理审批</span></div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button class="btn btn-primary btn-sm px-4">立即办理</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="task-card" onclick="openApprovalDetail('2026年度预算表.xlsx')">
+                                    <div class="d-flex justify-content-between">
+                                        <h5 class="text-primary mb-1">属性变更审批：2026年度预算表.xlsx</h5>
+                                        <span class="text-muted small">2026-02-03 11:00</span>
+                                    </div>
+                                    <div class="mt-2 text-secondary small">
+                                        当前环节：<span class="text-warning">财务总监审批</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="tab-myreq" style="display:none;">
+                                <p class="text-center text-muted py-5">暂无发起的流程</p>
+                            </div>
+                            <div id="tab-done" style="display:none;">
+                                <p class="text-center text-muted py-5">暂无已办结流程</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 审批处理界面 (核心功能) -->
+                <div id="page-approval" class="page-section">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="fas fa-arrow-left me-2 cursor-pointer" onclick="navTo('workflow')"></i>
+                            审批处理：<span id="approval-doc-title">技术白皮书_v2.pdf</span>
+                        </h5>
+                        <div>
+                            <button class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-download"></i> 下载源文件</button>
+                            <button class="btn btn-outline-secondary btn-sm"><i class="fas fa-print"></i> 打印表单</button>
+                        </div>
+                    </div>
+
+                    <div class="approval-layout">
+                        <!-- 左侧：文档在线预览 -->
+                        <div class="doc-preview-pane">
+                            <div class="bg-dark text-white p-2 d-flex justify-content-between align-items-center small">
+                                <span>预览模式 (只读)</span>
+                                <span>第 1 / 15 页</span>
+                            </div>
+                            <div class="flex-grow-1 d-flex justify-content-center align-items-center text-white-50">
+                                <div class="text-center">
+                                    <i class="fas fa-file-pdf fa-4x mb-3"></i>
+                                    <p>此处加载 PDF/Office 在线预览组件</p>
+                                    <p class="small">云深文档预览引擎 V2.0</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右侧：审批表单与记录 -->
+                        <div class="approval-sidebar">
+                            <div class="card-header bg-white">
+                                <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                                    <li class="nav-item">
+                                        <a class="nav-link active" data-bs-toggle="tab" href="#audit-form">审批操作</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#audit-flow">流程图</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#audit-log">流转记录</a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="card-body tab-content overflow-auto">
+                                <!-- Tab 1: 审批操作 -->
+                                <div class="tab-pane fade show active" id="audit-form">
+                                    <div class="alert alert-info small mb-3">
+                                        <i class="fas fa-info-circle"></i> 当前节点：<strong>部门经理审批</strong><br>
+                                        您具有“通过”和“驳回”的权限。
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small text-muted">常用语</label>
+                                        <div class="d-flex gap-2 mb-2">
+                                            <button class="btn btn-outline-secondary btn-sm" onclick="setComment('同意。')">同意</button>
+                                            <button class="btn btn-outline-secondary btn-sm" onclick="setComment('请补充资料。')">补充资料</button>
+                                        </div>
+                                        <textarea class="form-control" id="audit-comment" rows="4" placeholder="请输入审批意见..."></textarea>
+                                    </div>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-success" onclick="submitApproval('pass')"><i class="fas fa-check"></i> 同意 / 通过</button>
+                                        <button class="btn btn-danger" onclick="submitApproval('reject')"><i class="fas fa-times"></i> 驳回 / 拒绝</button>
+                                        <button class="btn btn-secondary" onclick="navTo('workflow')">暂存 / 返回</button>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 2: 流程图可视化 -->
+                                <div class="tab-pane fade" id="audit-flow">
+                                    <div class="d-flex flex-column align-items-center py-4">
+                                        <div class="border rounded p-2 bg-light mb-2 w-75 text-center text-muted small"><i class="fas fa-user"></i> 李四 (发起)</div>
+                                        <div class="text-muted"><i class="fas fa-arrow-down"></i></div>
+                                        <div class="border rounded p-2 bg-success text-white mb-2 w-75 text-center shadow-sm">
+                                            <i class="fas fa-user-tie"></i> 部门经理 (当前)
+                                        </div>
+                                        <div class="text-muted"><i class="fas fa-arrow-down"></i></div>
+                                        <div class="border rounded p-2 bg-light mb-2 w-75 text-center text-muted small"><i class="fas fa-user-secret"></i> 研发总监 (未开始)</div>
+                                        <div class="text-muted"><i class="fas fa-arrow-down"></i></div>
+                                        <div class="border rounded p-2 bg-light w-75 text-center text-muted small">归档</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 3: 流转记录 -->
+                                <div class="tab-pane fade" id="audit-log">
+                                    <div class="timeline-item">
+                                        <div class="timeline-dot success"></div>
+                                        <div class="fw-bold small">发起申请</div>
+                                        <div class="text-muted small">李四 - 2026-02-03 09:30</div>
+                                        <div class="bg-light p-2 rounded mt-1 small text-secondary">提交了文件《技术白皮书_v2.pdf》，请求归档。</div>
+                                    </div>
+                                    <div class="timeline-item">
+                                        <div class="timeline-dot" style="background:var(--primary-color)"></div>
+                                        <div class="fw-bold small text-primary">部门经理审批</div>
+                                        <div class="text-muted small">处理中...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. 流程模板设计器 (自定义流程) -->
+                <div id="page-process-design" class="page-section">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h4 class="mb-1">流程模板设计</h4>
+                            <span class="text-muted small">当前编辑：<strong>文件上传审批流 (默认)</strong> | 版本: V1.2</span>
+                        </div>
+                        <div>
+                            <button class="btn btn-outline-primary me-2"><i class="fas fa-save"></i> 保存</button>
+                            <button class="btn btn-primary"><i class="fas fa-rocket"></i> 发布</button>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <!-- 节点组件库 -->
+                        <div class="col-md-2">
+                            <div class="card shadow-sm">
+                                <div class="card-header bg-light small fw-bold">基础设置</div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label small">流程名称</label>
+                                        <input type="text" class="form-control form-control-sm" value="文件上传审批流">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small">适用范围</label>
+                                        <select class="form-select form-select-sm">
+                                            <option>全公司</option>
+                                            <option>研发部</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert alert-info small mt-3">
+                                <strong>提示：</strong><br>
+                                点击中间画布的节点，可在右侧配置节点权限。
+                            </div>
+                        </div>
+
+                        <!-- 流程画布 -->
+                        <div class="col-md-7">
+                            <div class="flow-canvas">
+                                <!-- 开始节点 -->
+                                <div class="flow-node p-3" onclick="selectNode(this, 'start')">
+                                    <div class="d-flex justify-content-between">
+                                        <strong><i class="fas fa-play-circle text-success me-2"></i>发起申请</strong>
+                                        <i class="fas fa-ellipsis-h text-muted"></i>
+                                    </div>
+                                    <div class="small text-muted mt-2">发起人：全员</div>
+                                    <div class="node-add-btn" title="添加下级节点"><i class="fas fa-plus"></i></div>
+                                    <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                                </div>
+
+                                <!-- 审批节点 1 -->
+                                <div class="flow-node p-3" onclick="selectNode(this, 'manager')">
+                                    <div class="d-flex justify-content-between">
+                                        <strong><i class="fas fa-user-check text-primary me-2"></i>部门经理审批</strong>
+                                        <i class="fas fa-cog text-muted cursor-pointer"></i>
+                                    </div>
+                                    <div class="small text-muted mt-2">审批人：发起人部门负责人</div>
+                                    <div class="small text-muted">权限：通过/驳回</div>
+                                    <div class="node-add-btn"><i class="fas fa-plus"></i></div>
+                                    <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                                </div>
+
+                                <!-- 审批节点 2 -->
+                                <div class="flow-node p-3" onclick="selectNode(this, 'director')">
+                                    <div class="d-flex justify-content-between">
+                                        <strong><i class="fas fa-user-check text-primary me-2"></i>总监审批</strong>
+                                        <i class="fas fa-cog text-muted cursor-pointer"></i>
+                                    </div>
+                                    <div class="small text-muted mt-2">审批人：指定角色(研发总监)</div>
+                                    <div class="node-add-btn"><i class="fas fa-plus"></i></div>
+                                    <div class="flow-arrow"><i class="fas fa-arrow-down"></i></div>
+                                </div>
+
+                                <!-- 结束节点 -->
+                                <div class="flow-node p-3 border-top-0 border-secondary" style="border-top: 4px solid #6c757d;" onclick="selectNode(this, 'end')">
+                                    <div class="d-flex justify-content-between">
+                                        <strong><i class="fas fa-stop-circle text-secondary me-2"></i>流程结束</strong>
+                                    </div>
+                                    <div class="small text-muted mt-2">动作：文件状态更名为“已归档”</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 节点属性配置 (5. 流程权限与节点设置) -->
+                        <div class="col-md-3">
+                            <div class="card shadow-sm h-100">
+                                <div class="card-header bg-white fw-bold">
+                                    节点属性设置
+                                </div>
+                                <div class="card-body" id="node-settings">
+                                    <p class="text-muted small text-center mt-5">请在画布中点击节点进行设置</p>
+                                </div>
+                                <!-- 隐藏的配置表单模板 -->
+                                <div id="node-settings-template" style="display:none;">
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">节点名称</label>
+                                        <input type="text" class="form-control form-control-sm" value="部门经理审批">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">审批对象 (权限)</label>
+                                        <select class="form-select form-select-sm mb-2">
+                                            <option value="dept">指定部门负责人</option>
+                                            <option value="role">指定角色</option>
+                                            <option value="user">指定人员</option>
+                                        </select>
+                                        <div class="bg-light p-2 rounded small text-secondary">
+                                            自动寻找发起人所在部门的负责人
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">操作权限</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" checked> <label class="form-check-label small">通过</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" checked> <label class="form-check-label small">驳回 (退回上一级)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"> <label class="form-check-label small">转办 (转给他人)</label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold">会签策略</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="signType" checked> 
+                                            <label class="form-check-label small">或签 (一人通过即可)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="signType"> 
+                                            <label class="form-check-label small">会签 (需所有人通过)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. 个人中心 -->
+                <div id="page-my" class="page-section">
+                   <div class="text-center py-5 text-muted">个人中心内容区域</div>
+                </div>
+
+                <!-- 7. 系统控制台 -->
+                <div id="page-admin" class="page-section">
+                    <div class="text-center py-5 text-muted">系统控制台区域</div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- 审批成功模态框 -->
+    <div class="modal fade" id="successModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content text-center p-3">
+                <div class="mb-2"><i class="fas fa-check-circle text-success fa-3x"></i></div>
+                <h5>操作成功</h5>
+                <p class="text-muted small">审批意见已提交，流程已流转至下一节点。</p>
+                <button class="btn btn-primary btn-sm w-100" data-bs-dismiss="modal" onclick="navTo('workflow')">返回列表</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 导航切换逻辑
+        function navTo(pageId, element) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+            // 显示目标页面
+            document.getElementById('page-' + pageId).classList.add('active');
+            
+            // 更新侧边栏高亮
+            if(element) {
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                element.classList.add('active');
+            } else {
+                // 如果没有传element（比如从按钮跳转），手动查找对应菜单高亮
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                // 简单匹配逻辑
+                const sidebarItem = document.querySelector(`.nav-item[onclick*="'${pageId}'"]`);
+                if(sidebarItem) sidebarItem.classList.add('active');
+            }
+        }
+
+        // 流程中心 Tab 切换
+        function switchTab(tabName) {
+            document.querySelectorAll('#workflowTabs .nav-link').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.getElementById('tab-todo').style.display = 'none';
+            document.getElementById('tab-myreq').style.display = 'none';
+            document.getElementById('tab-done').style.display = 'none';
+            
+            document.getElementById('tab-' + tabName).style.display = 'block';
+        }
+
+        // 打开审批详情页
+        function openApprovalDetail(fileName) {
+            document.getElementById('approval-doc-title').innerText = fileName;
+            navTo('approval');
+        }
+
+        // 填充常用语
+        function setComment(text) {
+            document.getElementById('audit-comment').value = text;
+        }
+
+        // 提交审批
+        function submitApproval(type) {
+            const comment = document.getElementById('audit-comment').value;
+            if(!comment && type === 'reject') {
+                alert('驳回必须填写意见！');
+                return;
+            }
+            // 模拟提交
+            var myModal = new bootstrap.Modal(document.getElementById('successModal'));
+            myModal.show();
+        }
+
+        // 流程设计器：选中节点
+        function selectNode(nodeEl, type) {
+            // 视觉选中
+            document.querySelectorAll('.flow-node').forEach(el => el.style.borderColor = '');
+            nodeEl.style.borderColor = '#ff9900'; // 高亮色
+
+            // 加载右侧配置
+            const settingsPanel = document.getElementById('node-settings');
+            if(type === 'manager' || type === 'director') {
+                settingsPanel.innerHTML = document.getElementById('node-settings-template').innerHTML;
+            } else {
+                settingsPanel.innerHTML = `<div class="text-center mt-5 text-muted">当前节点无需复杂配置</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

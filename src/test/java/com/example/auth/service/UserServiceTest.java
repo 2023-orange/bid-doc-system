@@ -1,8 +1,8 @@
 package com.example.auth.service;
 
-import com.example.biddoc.auth.application.service.UserService;
-import com.example.biddoc.auth.domain.enity.SysUser;
-import com.example.biddoc.auth.domain.repository.SysUserRepository;
+import com.example.biddoc.auth.service.UserService;
+import com.example.biddoc.auth.entity.SysUser;
+import com.example.biddoc.auth.repository.SysUserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

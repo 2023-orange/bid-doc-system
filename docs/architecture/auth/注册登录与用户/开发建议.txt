@@ -15,19 +15,6 @@
 审批流：job_level
 
 
-
-1.	api (用户接口层):
-o	DTO (Data Transfer Object): 接收前端参数。
-o	Controller: 仅做参数校验、调用 Application Service、封装统一响应结果。
-2.	Application (应用层):
-o	Service 接口与实现：编排业务流程，不包含核心业务规则，只负责“指挥”。
-o	Convertor: DTO 转 Entity。
-3.	Domain (领域层 - 核心):
-o	Entity: 充血模型，包含业务逻辑（如 order.pay()），而不仅仅是 Getter/Setter。
-o	Repository Interface: 定义数据访问接口（实现放在 Infrastructure 层）。
-o	Domain Event: 领域事件定义（用于解耦）。
-4.	Infrastructure (基础设施层实现):
-o	Mapper/Repository Impl: 具体 SQL 实现。
 3. 健全性设计 (Robustness)
 3.1 统一响应与异常处理
 •	Result 包装器：所有 API 必须返回统一格式 { code, message, data, traceId }。
@@ -41,3 +28,6 @@ o	捕获 Exception（兜底）：记录 ERROR 级别日志（包含堆栈和 tra
 •	复杂校验使用自定义注解或 Group Sequence。
 
 所有表必须包含 create_time, update_time, create_by, update_by，由 MyBatis-Plus 自动填充。
+
+todo
+sa-token+jwt   还有人员和角色关系表的等

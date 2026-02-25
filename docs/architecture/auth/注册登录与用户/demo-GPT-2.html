@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云深文档管理系统 - 产品原型</title>
+    <!-- 引入 Bootstrap 5 用于快速布局 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 FontAwesome 图标 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0091ff; /* 仿照截图的主色调 */
+            --bg-color: #f0f2f5;
+            --sidebar-width: 240px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden; /* 防止双重滚动条 */
+        }
+
+        /* 2. 登录界面样式 */
+        #login-page {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #e0f2ff 0%, #f0f2f5 100%);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: white;
+            width: 400px;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        /* 主布局 */
+        #app-layout {
+            display: none; /* 登录后显示 */
+            height: 100vh;
+            display: flex; /* 修正：初始需要设为none，JS控制flex */
+        }
+
+        /* 侧边导航 */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: #fff;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+        }
+        .logo-area {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.2rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .nav-menu {
+            flex: 1;
+            padding: 10px 0;
+            overflow-y: auto;
+        }
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            color: #555;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+        .nav-item:hover, .nav-item.active {
+            background-color: #e6f7ff;
+            color: var(--primary-color);
+            border-right: 3px solid var(--primary-color);
+        }
+        .nav-item i { margin-right: 10px; width: 20px; text-align: center;}
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 顶部栏 & 18. 全文检索 */
+        .top-header {
+            height: 60px;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .search-bar {
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 5px 15px;
+            width: 400px;
+            display: flex;
+            align-items: center;
+        }
+        .search-bar input {
+            background: transparent;
+            border: none;
+            color: white;
+            width: 100%;
+            outline: none;
+        }
+        .search-bar input::placeholder { color: rgba(255,255,255,0.7); }
+
+        /* 内容容器 */
+        .content-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* 4. 文件夹树形结构 */
+        .file-browser {
+            display: flex;
+            height: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .folder-tree {
+            width: 240px;
+            border-right: 1px solid #eee;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        .tree-node {
+            padding: 6px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            color: #333;
+        }
+        .tree-node:hover { background-color: #f5f5f5; }
+        .tree-node.active { background-color: #e6f7ff; color: var(--primary-color); }
+        .tree-indent { margin-left: 15px; }
+
+        /* 文件列表 */
+        .file-list-area {
+            flex: 1;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .file-toolbar {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* 13. 标签 & 11. 版本 & 19. 流程状态 */
+        .tag-badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-right: 4px;}
+        .tag-blue { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+        .tag-red { background: #fff1f0; color: #f5222d; border: 1px solid #ffa39e; }
+        .version-tag { background: #f0f0f0; border-radius: 10px; padding: 1px 6px; font-size: 0.7rem; color: #666; }
+        .status-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; }
+        .status-pending { background: #fffbe6; color: #faad14; border: 1px solid #ffe58f; }
+
+        /* 3. 首页卡片 */
+        .dashboard-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .stat-icon {
+            width: 48px; height: 48px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin-right: 15px;
+        }
+        
+        /* 16. 引用文件标识 */
+        .ref-icon { color: #8c8c8c; margin-right: 5px; transform: rotate(45deg); font-size: 0.8rem;}
+
+        /* 表格样式 */
+        .custom-table th { background-color: #fafafa; border-bottom: 1px solid #eee; font-weight: 500; color: #666; }
+        .custom-table td { vertical-align: middle; }
+        
+        /* 隐藏类 */
+        .page-section { display: none; }
+        .page-section.active { display: block; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 2. 登录界面 (可定制样式) -->
+    <div id="login-page">
+        <div class="login-card">
+            <div class="mb-4">
+                <i class="fas fa-cloud fa-3x text-primary"></i>
+                <h3 class="mt-3">云深文档</h3>
+            </div>
+            <form onsubmit="event.preventDefault(); login();">
+                <div class="mb-3">
+                    <input type="text" class="form-control" placeholder="用户名/手机号" value="admin">
+                </div>
+                <div class="mb-3">
+                    <input type="password" class="form-control" placeholder="密码" value="123456">
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="rememberMe">
+                        <label class="form-check-label text-muted small" for="rememberMe">记住密码</label>
+                    </div>
+                    <a href="#" class="small text-decoration-none">忘记密码?</a>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">登 录</button>
+            </form>
+            <div class="mt-4 text-muted small">
+                支持 中文 / English
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. 核心功能模块布局 -->
+    <div id="app-layout" style="display: none;">
+        <!-- 侧边栏 -->
+        <nav class="sidebar">
+            <div class="logo-area">
+                <i class="fas fa-layer-group me-2"></i> 文档协同平台
+            </div>
+            <div class="nav-menu">
+                <div class="nav-item active" onclick="switchPage('home', this)">
+                    <i class="fas fa-home"></i> 首页
+                </div>
+                <div class="nav-item" onclick="switchPage('files', this)">
+                    <i class="fas fa-folder-open"></i> 文档管理
+                </div>
+                <!-- 22. 我的 (个人中心) -->
+                <div class="nav-item" onclick="switchPage('my', this)">
+                    <i class="fas fa-user-circle"></i> 我的
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-share-alt"></i> 借阅与分发
+                </div>
+                <div class="nav-item">
+                    <i class="fas fa-chart-pie"></i> 统计报表
+                </div>
+                <div class="nav-item text-danger">
+                    <i class="fas fa-trash"></i> 回收站
+                </div>
+                <div class="mt-3 px-3 text-muted small">系统管理</div>
+                <div class="nav-item" onclick="switchPage('admin', this)">
+                    <i class="fas fa-cogs"></i> 系统控制台
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容 -->
+        <main class="main-content">
+            <!-- 顶部导航 & 18. 全文检索 -->
+            <header class="top-header">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-bars me-3 cursor-pointer"></i>
+                    <span>集团总公司 / 研发中心</span>
+                </div>
+                
+                <!-- 18. 搜索 (支持多关键词、标签) -->
+                <div class="search-bar">
+                    <i class="fas fa-search me-2"></i>
+                    <input type="text" placeholder="搜索文件名、内容、标签 (支持组合查询)...">
+                    <i class="fas fa-sliders-h ms-2 cursor-pointer" title="高级筛选"></i>
+                </div>
+
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-bell me-3"></i>
+                    <div class="dropdown">
+                        <span class="dropdown-toggle cursor-pointer" data-bs-toggle="dropdown">
+                            <img src="https://ui-avatars.com/api/?name=Admin&background=fff&color=0091ff" class="rounded-circle" width="32">
+                            <span class="ms-1">超级管理员</span>
+                        </span>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#">个人设置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="logout()">退出登录</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-body">
+                
+                <!-- 3. 首页 -->
+                <div id="page-home" class="page-section active">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <!-- 公告栏 -->
+                            <div class="dashboard-card bg-primary text-white" style="background: linear-gradient(135deg, #0091ff 0%, #36cfc9 100%);">
+                                <h4><i class="fas fa-bullhorn me-2"></i> 企业公告栏</h4>
+                                <p class="mb-0 mt-2">关于2026年企业文档安全规范升级的通知...</p>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="dashboard-card">
+                                        <h5><i class="fas fa-folder text-warning me-2"></i>快捷文件夹</h5>
+                                        <div class="list-group list-group-flush mt-3">
+                                            <a href="#" class="list-group-item list-group-item-action border-0"><i class="fas fa-folder text-primary me-2"></i> 2025年研发合同</a>
+                                            <a href="#" class="list-group-item list-group-item-action border-0"><i class="fas fa-folder text-primary me-2"></i> 硅谷分公司资料</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="dashboard-card">
+                                        <h5><i class="fas fa-chart-line text-success me-2"></i>本周小结</h5>
+                                        <div class="text-center py-3">
+                                            <h2 class="text-primary">80</h2>
+                                            <small class="text-muted">上传/新建文档 77个，修改 3个</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="dashboard-card">
+                                <h5>最近查看的文件</h5>
+                                <table class="table table-hover mt-3">
+                                    <tbody>
+                                        <tr>
+                                            <td><i class="fas fa-file-pdf text-danger me-2"></i> 敏捷网络FAQ.pdf</td>
+                                            <td class="text-end text-muted">2026-02-03</td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-file-word text-primary me-2"></i> 应用服务概述.docx</td>
+                                            <td class="text-end text-muted">2026-02-02</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <!-- 待办任务 -->
+                            <div class="dashboard-card">
+                                <h5><i class="fas fa-tasks text-info me-2"></i> 待办任务</h5>
+                                <div class="alert alert-warning mt-3">
+                                    <i class="fas fa-exclamation-circle"></i> 您有 2 个文件上传审批待处理
+                                    <button class="btn btn-sm btn-outline-warning mt-2 w-100">去处理</button>
+                                </div>
+                            </div>
+                            
+                            <div class="dashboard-card">
+                                <h5>推荐功能</h5>
+                                <div class="row text-center mt-3 g-3">
+                                    <div class="col-6"><div class="p-2 bg-light rounded"><i class="fas fa-share text-primary"></i><div class="small mt-1">借阅文件</div></div></div>
+                                    <div class="col-6"><div class="p-2 bg-light rounded"><i class="fas fa-star text-warning"></i><div class="small mt-1">关注文件</div></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 核心：文档管理 (点 4, 5, 8, 9, 11, 13, 16, 24) -->
+                <div id="page-files" class="page-section">
+                    <div class="file-browser">
+                        <!-- 4. 灵活文件夹分类 -->
+                        <div class="folder-tree">
+                            <div class="text-muted small mb-2 font-weight-bold">空间导航</div>
+                            <div class="tree-node active"><i class="fas fa-building me-1"></i> CH集团公司</div>
+                            <div class="tree-node tree-indent"><i class="fas fa-folder me-1 text-warning"></i> 研发测试文档</div>
+                            <div class="tree-node tree-indent"><i class="fas fa-folder me-1 text-warning"></i> 智能科技公司</div>
+                            <div class="tree-node tree-indent"><i class="fas fa-folder-open me-1 text-warning"></i> 项目中心</div>
+                            <div class="tree-node" style="margin-left: 30px;"><i class="fas fa-folder me-1 text-primary"></i> A项目 (2025)</div>
+                            <div class="tree-node" style="margin-left: 30px;"><i class="fas fa-folder me-1 text-warning"></i> 政策法规库</div>
+                        </div>
+
+                        <!-- 文件列表区 -->
+                        <div class="file-list-area">
+                            <div class="file-toolbar justify-content-between">
+                                <div>
+                                    <button class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> 新建文件</button>
+                                    <button class="btn btn-outline-secondary btn-sm"><i class="fas fa-upload"></i> 上传</button>
+                                    <!-- 5. 权限控制入口 -->
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="openModal('permModal')"><i class="fas fa-lock"></i> 权限设置</button>
+                                </div>
+                                <div>
+                                    <button class="btn btn-light btn-sm"><i class="fas fa-list"></i></button>
+                                    <button class="btn btn-light btn-sm"><i class="fas fa-th-large"></i></button>
+                                </div>
+                            </div>
+
+                            <div class="p-3 table-responsive">
+                                <table class="table table-hover custom-table">
+                                    <thead>
+                                        <tr>
+                                            <th width="30"><input type="checkbox"></th>
+                                            <th>名称 (24. 扩展属性: 合同编号)</th>
+                                            <th>13. 标签</th>
+                                            <th>24. 扩展属性 (状态/金额)</th>
+                                            <th>11. 版本</th>
+                                            <th>19. 审批状态</th>
+                                            <th>更新时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- 16. 引用文件示例 -->
+                                        <tr>
+                                            <td><input type="checkbox"></td>
+                                            <td>
+                                                <!-- 16. 引用图标 -->
+                                                <i class="fas fa-share ref-icon" title="引用文件"></i>
+                                                <i class="fas fa-file-pdf text-danger me-2"></i> 
+                                                <span class="fw-bold cursor-pointer" onclick="openModal('previewModal')">产品实施方案.pdf</span>
+                                                <div class="small text-muted">编号: DOC-2024-001</div>
+                                            </td>
+                                            <td><span class="tag-badge tag-blue">紧急处理</span></td>
+                                            <td><span class="text-muted">-</span></td>
+                                            <td><span class="version-tag">V3.0</span></td>
+                                            <td><span class="status-badge bg-success text-white">已归档</span></td>
+                                            <td class="small text-muted">2024-07-03</td>
+                                            <td>
+                                                <i class="fas fa-eye text-primary cursor-pointer me-2" title="9. 在线预览"></i>
+                                                <i class="fas fa-ellipsis-v text-muted"></i>
+                                            </td>
+                                        </tr>
+
+                                        <!-- 普通文件，展示扩展属性和审批 -->
+                                        <tr>
+                                            <td><input type="checkbox"></td>
+                                            <td>
+                                                <i class="fas fa-file-word text-primary me-2"></i> 
+                                                <span class="fw-bold">设备采购合同_华为.docx</span>
+                                                <div class="small text-muted">编号: HT-2025-882</div>
+                                            </td>
+                                            <td><span class="tag-badge tag-red">机密</span></td>
+                                            <td>
+                                                <!-- 24. 扩展属性 -->
+                                                <div class="small">金额: ¥500,000</div>
+                                                <div class="small text-muted">乙方: 华为技术</div>
+                                            </td>
+                                            <td><span class="version-tag">V1.2</span></td>
+                                            <td><span class="status-badge status-pending">审核中</span></td>
+                                            <td class="small text-muted">2025-06-20</td>
+                                            <td>
+                                                <i class="fas fa-pen text-primary cursor-pointer me-2" title="10. 在线编辑"></i>
+                                                <i class="fas fa-history text-muted cursor-pointer me-2" title="28. 日志"></i>
+                                                <i class="fas fa-info-circle text-muted cursor-pointer" onclick="openModal('attrModal')" title="17. 关联文件/属性"></i>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 22. 我的 (个人中心) -->
+                <div id="page-my" class="page-section">
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm p-3 text-center">
+                                <div class="h2 text-primary">211</div>
+                                <div class="text-muted">总文件数</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm p-3 text-center">
+                                <div class="h2 text-warning">14</div>
+                                <div class="text-muted">我的借阅</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm p-3 text-center">
+                                <div class="h2 text-success">3</div>
+                                <div class="text-muted">我的收藏</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white">
+                            <ul class="nav nav-tabs card-header-tabs">
+                                <li class="nav-item"><a class="nav-link active" href="#">我提交的</a></li>
+                                <li class="nav-item"><a class="nav-link" href="#">我处理的 (19. 审批)</a></li>
+                                <li class="nav-item"><a class="nav-link" href="#">我的关注</a></li>
+                            </ul>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr><th>类型</th><th>文件名称</th><th>当前步骤</th><th>申请时间</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge bg-primary">分发申请</span></td>
+                                        <td>技术白皮书_v2.pdf</td>
+                                        <td>部门经理审批</td>
+                                        <td>2026-02-03 10:00</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge bg-warning text-dark">借阅申请</span></td>
+                                        <td>2024财务报表.xlsx</td>
+                                        <td>已完成</td>
+                                        <td>2026-02-01 14:30</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统管理 (仅展示 5-8 权限管理概念) -->
+                <div id="page-admin" class="page-section">
+                     <div class="card">
+                         <div class="card-header">系统控制台 - 9. 系统扩展数据</div>
+                         <div class="card-body">
+                             <p class="text-muted">此处演示后台配置能力。</p>
+                             <table class="table table-bordered">
+                                 <thead><tr><th>字段名</th><th>类型</th><th>搜索</th><th>权限继承</th></tr></thead>
+                                 <tbody>
+                                     <tr><td>合同金额</td><td>数字</td><td><i class="fas fa-check text-success"></i></td><td><i class="fas fa-check text-success"></i></td></tr>
+                                     <tr><td>供应商</td><td>文本</td><td><i class="fas fa-check text-success"></i></td><td><i class="fas fa-check text-success"></i></td></tr>
+                                 </tbody>
+                             </table>
+                         </div>
+                     </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- 模态框：5, 6, 7, 8 权限设置 -->
+    <div class="modal fade" id="permModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">权限设置 - A项目 (超级权限控制)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4 border-end">
+                            <h6>授权对象 (5.2)</h6>
+                            <ul class="list-group">
+                                <li class="list-group-item active">研发部 (部门)</li>
+                                <li class="list-group-item">项目经理 (角色)</li>
+                                <li class="list-group-item">张三 (人员)</li>
+                            </ul>
+                            <button class="btn btn-outline-primary btn-sm mt-2 w-100">+ 添加对象</button>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span><input type="checkbox"> 继承上级权限 (5.4)</span>
+                                <span>有效期至: <span class="text-primary border-bottom">永久 (5.3)</span></span>
+                            </div>
+                            
+                            <h6>文件夹权限 (5.5)</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col-3"><input type="checkbox" checked> 显示</div>
+                                <div class="col-3"><input type="checkbox" checked> 下载</div>
+                                <div class="col-3"><input type="checkbox"> 创建文件夹</div>
+                                <div class="col-3"><input type="checkbox"> 删除</div>
+                                <div class="col-3"><input type="checkbox"> 权限设置</div>
+                                <div class="col-3"><input type="checkbox"> 导出列表</div>
+                            </div>
+                            
+                            <hr>
+                            
+                            <h6>文件权限 (5.6)</h6>
+                            <div class="row g-2">
+                                <div class="col-3"><input type="checkbox" checked> 显示</div>
+                                <div class="col-3"><input type="checkbox" checked> 在线预览</div>
+                                <div class="col-3"><input type="checkbox"> 在线编辑</div>
+                                <div class="col-3"><input type="checkbox"> 打印</div>
+                                <div class="col-3"><input type="checkbox"> 版本升级</div>
+                                <div class="col-3"><input type="checkbox"> 借阅/分发</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary">保存配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框：9. 在线预览 -->
+    <div class="modal fade" id="previewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl" style="height: 90vh;">
+            <div class="modal-content h-100">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="fas fa-file-pdf text-danger me-2"></i>产品实施方案.pdf (V3.0)</h6>
+                    <div>
+                        <!-- 12. 动态水印模拟 -->
+                        <span class="badge bg-light text-dark me-2">水印: Admin 2026-02-03</span>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body bg-secondary p-0 d-flex justify-content-center align-items-center text-white relative">
+                    <!-- 水印层 -->
+                    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%) rotate(-45deg); font-size:4rem; opacity:0.1; pointer-events:none; white-space:nowrap;">
+                        云深文档 - Admin
+                    </div>
+                    <div>
+                        <i class="fas fa-spinner fa-spin fa-3x"></i>
+                        <p class="mt-2">正在加载文档预览引擎...</p>
+                        <p class="small text-white-50">(此处模拟 9. 在线查看文件功能，支持PDF/Office/CAD)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框：17. 关联文件 & 24. 属性 & 28. 日志 -->
+    <div class="modal fade" id="attrModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">文件详情：设备采购合同_华为.docx</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item"><a class="nav-link active" href="#">基本属性 (24)</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#">关联文件 (17)</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#">操作日志 (28)</a></li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        <!-- 属性面板 -->
+                        <div class="tab-pane fade show active">
+                            <form>
+                                <div class="row mb-2">
+                                    <label class="col-sm-3 col-form-label text-muted">合同金额</label>
+                                    <div class="col-sm-9"><input type="text" class="form-control" value="¥500,000"></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <label class="col-sm-3 col-form-label text-muted">签署日期</label>
+                                    <div class="col-sm-9"><input type="text" class="form-control" value="2025-06-20"></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <label class="col-sm-3 col-form-label text-muted">标签 (13)</label>
+                                    <div class="col-sm-9">
+                                        <span class="tag-badge tag-red">机密</span>
+                                        <span class="tag-badge tag-blue">合同</span>
+                                        <button class="btn btn-link btn-sm p-0">+ 添加</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <!-- 日志面板 (28) -->
+                        <div class="tab-pane fade">
+                            <table class="table table-sm text-small">
+                                <thead><tr><th>时间</th><th>用户</th><th>操作</th><th>详情</th></tr></thead>
+                                <tbody>
+                                    <tr><td>02-03 10:00</td><td>李四</td><td>在线预览</td><td>查看时长 5分钟</td></tr>
+                                    <tr><td>02-02 14:00</td><td>张三</td><td>修改属性</td><td>修改金额字段</td></tr>
+                                    <tr><td>02-01 09:30</td><td>Admin</td><td>上传文件</td><td>版本 V1.0</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入 Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 模拟登录功能
+        function login() {
+            document.getElementById('login-page').style.display = 'none';
+            document.getElementById('app-layout').style.display = 'flex'; // 修正 display 属性
+        }
+
+        function logout() {
+            document.getElementById('login-page').style.display = 'flex';
+            document.getElementById('app-layout').style.display = 'none';
+        }
+
+        // 页面切换逻辑
+        function switchPage(pageId, element) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+            // 显示目标页面
+            document.getElementById('page-' + pageId).classList.add('active');
+            
+            // 更新导航状态
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            if(element) element.classList.add('active');
+        }
+
+        // 打开模态框工具函数
+        function openModal(modalId) {
+            var myModal = new bootstrap.Modal(document.getElementById(modalId));
+            myModal.show();
+        }
+
+        // 初始化：如果需要可自动触发登录（开发时用）
+        // login(); 
+    </script>
+</body>
+</html>

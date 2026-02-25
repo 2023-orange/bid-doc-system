@@ -1,0 +1,386 @@
+很好，这一轮你补充的是**真实可落地的企业级权限与目录治理需求**，已经明显超出“普通文件夹”的复杂度，**本质是一个「目录 + 文件 + 权限策略引擎」**。
+下面我**系统性补全并深化**你点名的几块内容，全部是**可直接指导表设计、DDD 建模和代码实现的版本**。
+
+---
+
+# 一、统一语言（Ubiquitous Language）——增强版（必须固化）
+
+> **目的**：避免后期「文件夹 / 权限 / 授权对象」概念混乱
+
+## 1.1 核心对象术语
+
+| 术语                     | 精确定义                               |
+| ---------------------- | ---------------------------------- |
+| Folder                 | 用于组织 Document 的逻辑容器，支持无限层级         |
+| RootFolder             | 一级主目录（系统预置或管理员创建）                  |
+| Virtual Classification | 逻辑分类维度（部门 / 项目 / 主题 / 时间），不限制结构    |
+| FolderAdmin            | 文件夹管理员，拥有该文件夹权限分配权                 |
+| AuthorizationSubject   | 授权主体：部门 / 角色 / 用户                  |
+| Permission             | 对 Folder / Document 的操作能力集合        |
+| PermissionScope        | 权限作用范围：CURRENT / CURRENT_AND_CHILD |
+| PermissionExpiry       | 权限失效时间                             |
+| EffectivePermission    | 当前时间下计算后的生效权限                      |
+| InheritedPermission    | 从父文件夹继承的权限                         |
+| OverridePermission     | 当前文件夹覆盖父级的权限                       |
+| FileOverridePermission | 针对单个文件的精细化授权                       |
+
+---
+
+## 1.2 权限相关统一语言（强烈建议写进 Wiki）
+
+* **授权 ≠ 生效**
+* **继承 ≠ 不可修改**
+* **文件夹权限 ≠ 文件权限**
+* **管理员 ≠ 超级管理员**
+
+---
+
+# 二、Folder 功能需求清单（完整版，可验收）
+
+> 按 **能力域** 分组，避免“功能堆砌”
+
+---
+
+## 2.1 目录结构与分类能力
+
+| 编号       | 功能             | 优先级 | 验收标准              |
+| -------- | -------------- | --- | ----------------- |
+| F-STR-01 | 不限制文件夹分类方式     | P0  | 可按部门/项目/主题/时间任意建树 |
+| F-STR-02 | 支持无限层级         | P0  | DB 无限制，业务限制 ≤ 20  |
+| F-STR-03 | 支持系统预置主目录      | P0  | 管理员可配置            |
+| F-STR-04 | 单文件夹子项 ≥ 10000 | P0  | 查询 < 500ms        |
+| F-STR-05 | 文件夹排序          | P1  | 支持按更新时间倒序         |
+
+---
+
+## 2.2 文件夹基础操作
+
+| 编号       | 功能     | 优先级 | 验收标准   |
+| -------- | ------ | --- | ------ |
+| F-BIZ-01 | 创建文件夹  | P0  | 同级唯一   |
+| F-BIZ-02 | 重命名文件夹 | P0  | 不影响子目录 |
+| F-BIZ-03 | 移动文件夹  | P0  | 禁止循环   |
+| F-BIZ-04 | 删除文件夹  | P0  | 支持策略   |
+| F-BIZ-05 | 批量操作   | P1  | ≤ 100  |
+
+---
+
+## 2.3 权限模型（重点）
+
+### 文件夹权限能力
+
+| 权限               | 说明        |
+| ---------------- | --------- |
+| FOLDER_VIEW      | 可看到文件夹名称  |
+| FOLDER_CREATE    | 可创建子文件夹   |
+| FILE_UPLOAD      | 上传文件      |
+| FILE_DOWNLOAD    | 下载文件（含打包） |
+| FOLDER_MOVE      | 移动        |
+| FOLDER_RENAME    | 重命名       |
+| FOLDER_DELETE    | 删除        |
+| PERMISSION_GRANT | 授权他人      |
+
+---
+
+## 2.4 授权对象模型（5.2）
+
+| 授权类型 | 行为规则             |
+| ---- | ---------------- |
+| 部门   | 人员新增/离职 → 权限自动变化 |
+| 角色   | 角色成员变更 → 权限自动变化  |
+| 人员   | 仅对指定用户           |
+
+> ⚠️ **Folder 模块不维护人员变化，只感知结果**
+
+---
+
+## 2.5 权限时间控制（5.3）
+
+| 能力    | 规则                 |
+| ----- | ------------------ |
+| 默认    | 永久有效               |
+| 设置有效期 | startAt / expireAt |
+| 失效处理  | 自动回收，不删除记录         |
+| 计算方式  | 实时判断 currentTime   |
+
+---
+
+## 2.6 权限继承与覆盖（5.4）
+
+| 规则                        | 说明        |
+| ------------------------- | --------- |
+| 默认                        | 子文件夹继承父权限 |
+| Scope = CURRENT           | 仅当前文件夹    |
+| Scope = CURRENT_AND_CHILD | 向下继承      |
+| 子级覆盖                      | 覆盖父级同类权限  |
+
+---
+
+## 2.7 文件级权限（8）
+
+> **这是进阶能力，但你已经明确提出，必须设计**
+
+| 能力            | 说明                    |
+| ------------- | --------------------- |
+| File Override | 单文件独立授权               |
+| 场景            | 1000 个文件，仅允许看到 20 个   |
+| 优先级           | File > Folder         |
+| 实现            | document_permission 表 |
+
+---
+
+# 三、文件夹状态设计（比你之前看到的更完整）
+
+```mermaid
+stateDiagram-v2
+    [*] --> NORMAL
+    NORMAL --> ARCHIVED : archive()
+    NORMAL --> DELETED : delete()
+    ARCHIVED --> NORMAL : restore()
+```
+
+| 状态       | 含义     |
+| -------- | ------ |
+| NORMAL   | 正常可用   |
+| ARCHIVED | 归档（只读） |
+| DELETED  | 逻辑删除   |
+
+---
+
+# 四、Folder 模块 DDD 分层落地（增强版）
+
+```text
+folder/
+├── api/
+│   ├── controller/
+│   │   ├── FolderController.java
+│   │   └── FolderPermissionController.java
+│   ├── dto/
+│   │   ├── req/
+│   │   └── resp/
+│
+├── application/
+│   ├── service/
+│   │   ├── FolderAppService.java
+│   │   └── FolderPermissionAppService.java
+│   ├── assembler/
+│   └── event/
+│       └── FolderChangedEvent.java
+│
+├── domain/
+│   ├── entity/
+│   │   ├── Folder.java
+│   │   └── FolderPermission.java
+│   ├── valueobject/
+│   │   ├── PermissionScope.java
+│   │   └── AuthorizationSubject.java
+│   ├── repository/
+│   └── exception/
+│
+└── infrastructure/
+    ├── mapper/
+    ├── repository/
+    └── cache/
+        └── FolderPermissionCache.java
+```
+
+---
+
+# 五、关键设计结论（非常重要）
+
+1. **Folder ≠ 分类**
+
+   * 分类是“你怎么用”，不是系统限制
+
+2. **权限是时间维度 + 继承计算结果**
+
+   * 不做实时计算 = 系统迟早崩
+
+3. **文件级权限必须独立表**
+
+   * 否则 Folder 表会炸
+
+4. **管理员是 Folder 内部角色**
+
+   * 不是系统角色
+
+
+这是一个非常扎实的DDD（领域驱动设计）雏形。你提供的原详细设计主要聚焦在 “通用文档管理（DMS）” 的底层能力（如结构、权限、基础操作），这非常好。
+
+但是，仔细对比你提供的 “业务需求描述”（第一、二、三、四部分），原设计缺少了“业务流程”和“自动化规则”的支撑。例如：文件收集任务、截止日期预警、审批流程、自动归档失效文件等。
+
+下面的优化方案将**业务逻辑层（Business Logic）与基础能力层（Core Capability）**进行融合，在保留你原有架构的基础上，补充了针对“收集、流程、监控”的详细设计。
+
+一、统一语言（Ubiquitous Language）—— 完整全景版
+
+优化说明：补充了业务流程（收集、审批、预警）相关的术语，确保开发人员理解“文件夹”不仅仅是存文件的，还是一个“任务容器”。
+
+1.1 核心对象术语（Core Domain）
+术语	精确定义	来源/补充
+Folder (文件夹)	基础存储容器，可挂载权限。	原有保留
+CollectionTask (收集任务)	(新增) 绑定在文件夹上的业务属性。包含：截止日期、负责人、收集状态。	对应需求“文件收集过程”
+FolderOwner (文件夹负责人)	(新增) 区别于管理员，指被指派负责该文件夹内容填充的业务人员（如：市场专员）。	对应需求“人员授权”
+Escalation (升级/上报)	(新增) 当任务超期时，责任自动上升至上级领导的过程。	对应需求“过期处理/流程”
+InvalidFolder (失效归集箱)	(新增) 一个特殊的逻辑区域，用于自动存放过期或被判定失效的文件。	对应需求“过期处理”
+AuditLog (审计日志)	(新增) 记录谁、在何时、下载/查看了什么文件的不可篡改记录。	对应需求“后台记录”
+PermissionStrategy	权限策略：决定是“继承”、“覆盖”还是“独立”。	原有保留
+1.2 状态与动作术语
+
+Monitor (监控)：项目负责人不进入文件夹，直接查看完成率（百分比/数量）的动作。
+
+Alert (预警)：T-3天触发的系统行为。
+
+Archive (归档)：与 Delete 不同，指移动到失效文件夹并更改权限（如：仅预览）。
+
+二、Folder 功能需求清单 —— 业务与能力融合版
+
+优化说明：将原本纯技术的功能列表，按照“基础底座”和“业务增强”进行分层，确保既满足存取，又满足管理。
+
+2.1 目录结构与属性管理（增强）
+编号	功能名称	优先级	详细验收标准/逻辑补充
+F-STR-01	多维度无限层级分类	P0	原有保留。支持部门/项目/主题/时间维度。
+F-STR-02	系统预置主目录初始化	P0	(补充) 系统启动或初始化新项目时，自动创建“产品资质”、“技术资质”等根目录（Configurable Root）。
+F-STR-03	文件夹业务属性扩展	P1	(补充) 文件夹表需支持扩展字段：deadline (完成日期), owner_id (负责人), status (收集状态)。
+F-STR-04	可视化监控面板	P1	(新增) 项目负责人视图：显示所有子文件夹列表，通过聚合查询（Aggregation）展示各文件夹的文件数量、最新更新时间（倒序排列）。
+2.2 权限与授权模型（细化 5.x & 6/7 需求）
+编号	功能名称	优先级	详细验收标准/逻辑补充
+F-PERM-01	动态主体授权	P0	原有保留。补充逻辑：当选择“部门”授权时，系统需订阅用户中心的“人员变更事件”，实时刷新缓存，无需手动重置权限。
+F-PERM-02	权限分级管控	P1	(补充) 实现三级管理员模型：<br>1. SystemAdmin：管理所有。<br>2. DocAdmin：管理特定业务域的结构。<br>3. FolderAdmin：被DocAdmin临时委派管理特定子树的人员。
+F-PERM-03	失效权限控制	P2	原有保留。权限到期后自动回收（软删除关联记录）。
+F-PERM-04	文件级精细化权限	P2	原有保留。场景：1000个文件中仅开放20个给外部审计人员。
+2.3 流程与自动化（针对需求三、四）
+编号	功能名称	优先级	详细验收标准/逻辑补充
+F-FLOW-01	截止日期预警	P1	(新增) 每日定时任务扫描 deadline。满足 current = deadline - 3 days 时，发送站内信/邮件给 FolderOwner。
+F-FLOW-02	收集流程审批	P1	(新增) 两种模式配置：<br>1. 免审模式：上传即完成。<br>2. 审批模式：上传 -> 状态(待审) -> 项目负责人确认 -> 状态(生效)。
+F-FLOW-03	超期自动升级	P2	(新增) 若 current > deadline 且状态未完成：触发事件，查找 FolderOwner 的上级（通过组织架构接口），发送催办邮件。
+F-FLOW-04	失效文件自动归类	P2	(新增) 标记为“Expired”的文件，系统自动移动（Move）至 /失效文件夹/原路径，并重置权限为“仅预览/禁止下载”（策略可配）。
+2.4 日志与追溯（针对需求四）
+编号	功能名称	优先级	详细验收标准/逻辑补充
+F-LOG-01	下载/预览全记录	P0	(新增) 记录五元组：{User, Action(Download/View), FileID, Timestamp, IP}。支持按人、按文件反查。
+三、文件夹与流程状态设计（优化版）
+
+这里需要设计两个维度的状态机：文件夹本身的生命周期 和 文件收集任务的状态。
+
+3.1 文件夹生命周期 (Lifecycle)
+code
+Mermaid
+download
+content_copy
+expand_less
+stateDiagram-v2
+    [*] --> NORMAL : 创建
+    NORMAL --> LOCKED : 锁定 (停止写入)
+    NORMAL --> ARCHIVED : 归档 (只读)
+    NORMAL --> DELETED : 逻辑删除
+    DELETED --> [*] : 物理清除 (定时)
+3.2 文件收集任务状态 (Collection Status) —— 核心业务逻辑
+
+针对需求中的“查看收集完成情况”、“流程监控”。
+
+code
+Mermaid
+download
+content_copy
+expand_less
+stateDiagram-v2
+    [*] --> PENDING : 初始化(设定截止日)
+    PENDING --> COLLECTING : 负责人开始上传
+    COLLECTING --> IN_REVIEW : 提交审批 (若开启审批)
+    IN_REVIEW --> COMPLETED : 负责人通过
+    IN_REVIEW --> REJECTED : 驳回
+    REJECTED --> COLLECTING : 重新上传
+
+    COLLECTING --> OVERDUE : 超过截止日
+    PENDING --> OVERDUE : 超过截止日
+
+    OVERDUE --> COLLECTING : 补交
+四、领域模型设计 DDD (Domain Design) —— 丰富版
+
+在原有的 folder 域基础上，建议拆分出或增加 "Governance (治理)" 上下文，处理规则和流程。
+
+code
+Text
+download
+content_copy
+expand_less
+com.company.doc
+├── context.folder (核心域)
+│   ├── domain
+│   │   ├── entity
+│   │   │   ├── Folder (聚合根)
+│   │   │   │   ├── id
+│   │   │   │   ├── businessType (产品/技术/合同)
+│   │   │   │   └── auditMetadata (创建人/时间)
+│   │   │   ├── Document (文件实体)
+│   │   │   └── FolderPermission (权限值对象列表)
+│   │   ├── service
+│   │   │   └── PermissionCalculationDomainService (复杂的权限计算：继承+覆盖+过期)
+│
+├── context.governance (治理/业务域 - 针对你的特殊需求)
+│   ├── domain
+│   │   ├── entity
+│   │   │   ├── CollectionTask (收集任务)
+│   │   │   │   ├── folderId
+│   │   │   │   ├── deadline
+│   │   │   │   ├── ownerId
+│   │   │   │   ├── approvalRequired (是否需审批)
+│   │   │   │   └── status (PENDING/COMPLETED/OVERDUE)
+│   │   ├── service
+│   │   │   ├── DeadlineMonitorService (时效监控)
+│   │   │   └── ExpiryFileHandler (失效文件移动逻辑)
+│
+├── context.audit (审计域)
+│   ├── domain
+│   │   ├── entity
+│   │   │   └── AccessLog (下载/预览记录)
+五、关键设计难点与解决方案（Deep Dive）
+5.1 权限计算的高性能设计（针对“不限层级、按部门动态变化”）
+
+问题：如果文件夹有10层，每层都有不同的部门和角色权限，用户访问第10层文件时，实时计算会导致数据库爆炸。
+
+优化方案 —— "扁平化快照" + "事件驱动更新"
+
+权限快照表 (auth_snapshot)：
+
+不依赖递归查询。为每个 Folder 维护一个“当前生效权限列表”。
+
+结构：folder_id | subject_type (User/Dept/Role) | subject_id | permission_bitmask
+
+当父目录权限变更时，异步触发子目录的快照更新（使用消息队列）。
+
+人员变动处理：
+
+当 User A 加入 Dept B 时，不需要更新 Folder 表。
+
+在用户登录或访问时，获取用户的所有 Role 和 Dept，直接匹配快照表。
+
+5.2 过期文件与失效文件夹的处理逻辑
+
+需求：过期自动归类到“失效”文件夹，并控制权限。
+
+设计：
+
+系统级失效库：在根目录下建立隐藏文件夹 /.system/invalid_archive。
+
+定时任务 (Job)：
+
+扫描所有 expireAt < now() 的文件。
+
+Action 1 (Move): 将文件物理路径或逻辑引用移动到失效库，保留原文件名的层级结构（如 /.system/invalid_archive/project_A/tech_docs/file1.pdf）。
+
+Action 2 (ACL Update): 覆盖该文件的权限 ACL，设置为 SystemAdmin: Full, OriginalUser: ViewOnly, Others: Deny。
+
+5.3 监控与通知（T-3 通知与升级）
+
+设计：
+
+通知聚合：不要每有一个文件夹快过期就发一封邮件。
+
+逻辑：每天早上 8:00 运行 Job，聚合该用户负责的所有 T-3 到期的文件夹，发送一封汇总邮件。
+
+上级查找：
+
+需要集成企业的 HR/组织架构服务。
+
+接口定义：OrgService.getLeader(userId)。如果找不到上级，默认升级给项目管理员。
+

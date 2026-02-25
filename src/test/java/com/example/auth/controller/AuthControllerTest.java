@@ -1,8 +1,8 @@
 package com.example.auth.controller;
 
 import com.example.biddoc.auth.api.controller.AuthController;
-import com.example.biddoc.auth.application.service.AuthService;
-import com.example.biddoc.auth.domain.enity.SysUser;
+import com.example.biddoc.auth.service.AuthService;
+import com.example.biddoc.auth.entity.SysUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
