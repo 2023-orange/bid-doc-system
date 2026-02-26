@@ -1,0 +1,108 @@
+# 📚 核心拦截器与配置数据流转架构文档 (MVC + Sa-Token)
+
+## 一、 全局架构视角 (Overview)
+
+在一个标准的 HTTP 请求中，我们的系统设下了**三道防线**与**两个边界**：
+
+* **第一道防线（跨域与格式边界）**：`WebMvcConfig` (CORS) + `JacksonConfig` (JSON序列化)
+* **第二道防线（请求拦截管线）**：`LoggingInterceptor` -> `TokenInterceptor` (整合 Sa-Token) -> `AuthInterceptor`
+* **第三道防线（持久化边界）**：`MyMetaObjectHandler` (MyBatis-Plus 自动填充) + `UserContext`
+
+---
+
+## 二、 核心组件解析（它们做什么？什么时候发挥作用？）
+
+### 1. 边界转换层 (Configurations)
+
+| 组件名称 | 做什么 (职责) | 什么时候发挥作用 (触发时机) |
+| --- | --- | --- |
+| **`WebMvcConfig`** | **交通指挥官**。负责配置跨域规则 (CORS) 和注册拦截器的先后顺序。 | **请求刚进入 Tomcat，还未进入任何业务代码时**。如果是预检请求 (`OPTIONS`)，在这里直接放行。 |
+| **`JacksonConfig`** | **翻译官**。解决前后端数据格式的“代沟”。比如前端 JS 接收超过 16 位的 Long 型数字会精度丢失，它会把 Long 转成 String；它还负责把后端的 `LocalDateTime` 统一格式化为 `yyyy-MM-dd HH:mm:ss`。 | **出入参时**。即前端 JSON 映射到 Controller 的 `@RequestBody` 对象时，以及 Controller 返回 `ApiResponse` 对象序列化成 JSON 时。 |
+
+### 2. 请求拦截管线 (Interceptors)
+
+拦截器管线严格按照 `WebMvcConfig` 中配置的 `order` 顺序单向通行：
+
+| 组件名称 | 做什么 (职责) | 什么时候发挥作用 (触发时机) |
+| --- | --- | --- |
+| **`LoggingInterceptor`** | **监控探头**。生成全局唯一的 `TraceId`，记录请求的开始时间、请求路径、最终耗时和状态码。它将 `TraceId` 放入 `MDC`（日志诊断上下文），保证一条请求在日志里的所有打印都能串联起来。 | **最外层**。请求最先进入它 (`preHandle`)，响应最后离开它 (`afterCompletion`)。 |
+| **`TokenInterceptor`** | **身份验证处（桥接层）**。借助 Sa-Token 校验 Token 的合法性、是否过期（并自动重置 30 分钟无感续期）。从 Redis 中拉取当前用户缓存，提取为精简版的 `UserInfo` 并塞入 `UserContext` 和 `MDC`。 | 日志记录完毕后，**进入 Controller 业务逻辑之前**。 |
+| **`AuthInterceptor`** | **VIP 检票口**。基于上一步解析出的身份，校验该接口是否需要特定的角色（如 `ADMIN`）才能访问。 | Token 校验通过后，**如果访问的是敏感接口（如 /users/**）则触发此拦截器**。 |
+
+### 3. 数据持久层辅助 (Persistence)
+
+| 组件名称 | 做什么 (职责) | 什么时候发挥作用 (触发时机) |
+| --- | --- | --- |
+| **`UserContext`** | **用户的临时贴身护照**。内部封装了对 Sa-Token Redis Session 的读取，保证在 Service 层或 Mapper 层能随时无参获取当前“是谁在操作”。 | 贯穿整个请求的业务处理周期，**随时调用随时发挥作用**。 |
+| **`MyMetaObjectHandler`** | **自动打卡机**。利用 MyBatis-Plus 拦截 SQL 写入，自动从 `UserContext` 获取当前人 ID 和当前时间，悄悄塞进 `createdAt`、`updatedBy` 等审计字段中。 | **执行 Mapper 的 `insert` 或 `update` 方法时**，在 SQL 发送到数据库前一瞬间触发。 |
+
+---
+
+## 三、 数据流转全景图 (以“前端请求创建一个部门”为例)
+
+让我们通过一个真实的业务场景，看看数据是如何像流水一样穿过这些组件的。
+
+**场景**：前端页面（`localhost:3000`）带着 Token 发起一个 `POST /api/v1/departments` 请求，传递了 JSON 数据 `{"name":"技术部", "parentId":1}`。
+
+### ➡️ 【上行链路】（前端 -> 数据库）
+
+1. **预检与跨域 (`WebMvcConfig`)**：
+* 前端浏览器先偷偷发一个 `OPTIONS` 请求问后端：“我能发跨域 POST 吗？”
+* `WebMvcConfig` 里的 `addCorsMappings` 拦截到，返回：“允许所有来源，允许带 Token”，预检通过。
+
+
+2. **进入日志记录 (`LoggingInterceptor.preHandle`)**：
+* 生成 `TraceId = "a1b2c3d4"`，放入日志 MDC。
+* 记录 `startTime`，打印日志：`==> REQ: POST /api/v1/departments`。
+
+
+3. **身份解析 (`TokenInterceptor.preHandle`)**：
+* Sa-Token `StpUtil.checkLogin()` 登场，校验 HTTP Header 里的 Authorization Token 是否有效，有效则刷新该 Token 的 30 分钟生命周期。
+* 从 Redis 读取 `SysUser` 对象，提取 ID (例如：`1001`) 和 角色 (`ADMIN`)。
+* 装配成 `UserContext.UserInfo`。
+* 将 `user` 放入日志 `MDC`，现在日志变成：`[a1b2c3d4] ... User:admin(1001)`。
+
+
+4. **权限卡点 (`AuthInterceptor.preHandle`)**：
+* 发现请求路径匹配敏感接口。
+* 调用 `StpUtil.hasRole("ADMIN")` (内部触发我们刚才写的 `StpInterfaceImpl`)。校验通过，放行。
+
+
+5. **数据翻译 (`JacksonConfig`)**：
+* 到达 Controller。`JacksonConfig` 自动将前端的 JSON Byte 流反序列化为 Java 的 `DepartmentCreateReqDTO` 对象。
+
+
+6. **业务处理与自动填充 (`Controller -> Service -> Mapper -> MyMetaObjectHandler`)**：
+* Controller 校验参数通过，转成 `SysDepartment` Entity。
+* Service 调用 `mapper.insert(department)`。
+* **【关键点】** `MyMetaObjectHandler` 介入：它发现要 Insert 数据，于是调用 `UserContext.get()` 获取到当前人是 `1001`。
+* 它悄悄把 `createdAt = 2026-02-26 12:00:00`，`createdBy = "1001"` 塞进 Entity。
+* 最终生成完整的 SQL 存入 PostgreSQL。
+
+
+
+### ⬅️ 【下行链路】（数据库 -> 前端）
+
+7. **数据翻译 (`JacksonConfig`)**：
+* Controller 返回 `ApiResponse.success()`。
+* `JacksonConfig` 将 Java 对象序列化为 JSON。如果对象里有 `Long id = 123456789012345678L`，它会自动转成字符串 `"123456789012345678"`，防止前端 JS 解析时末尾变成 000。
+
+
+8. **离开拦截器管线 (`LoggingInterceptor.afterCompletion`)**：
+* 取出 `startTime`，计算出耗时（如 `45ms`）。
+* 打印日志：`<== RES: POST /api/v1/departments [200] [45ms] User:admin(1001)`。
+* **清理 `MDC` 线程变量**，避免下一次请求用到旧的 TraceId。
+
+
+9. **响应到达前端**：前端收到标准的 JSON 数据，展示“创建成功”。
+
+---
+
+## 四、 架构师总结 (Takeaways)
+
+这套架构的设计哲学在于**“解耦与职责单一”**：
+
+* 业务代码（Service/Controller）**永远不需要关心**跨域怎么处理、日志怎么打、人是谁、创建时间怎么填。它只需要写：`mapper.insert(dept)`。
+* 安全与规范被下放到了**基础设施层 (Common)**。通过拦截器和配置类，我们将系统切成了多个“切面 (AOP)”，保证了代码的极度整洁和高度复用。
+
+你可以将这份文档保存在你的 `docs/architecture/` 目录下，作为新人熟悉项目核心流转机制的**标准培训教材**！

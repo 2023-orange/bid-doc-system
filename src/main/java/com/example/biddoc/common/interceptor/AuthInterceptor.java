@@ -1,6 +1,6 @@
 package com.example.biddoc.common.interceptor;
 
-import com.example.biddoc.common.constant.UserContext;
+import cn.dev33.satoken.stp.StpUtil;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,8 +21,9 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        UserContext.UserInfo user = UserContext.get();
-        if (user == null || !user.isAdmin()) {
+        // 【优化】不依赖 UserContext，直接通过 Sa-Token 校验当前用户是否具有 ADMIN 角色
+        // Sa-Token 的 StpInterface 接口来提供角色数据
+        if (!StpUtil.hasRole("ADMIN")) {
             throw new BusinessException(ErrorCode.PERMISSION_DENIED);
         }
         return true;

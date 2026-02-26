@@ -35,19 +35,24 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // 1. 日志拦截器 (最外层，先记录进入，最后记录离开)
         registry.addInterceptor(loggingInterceptor)
                 .addPathPatterns("/**")
-                .order(1); // 显式指定顺序
+                .order(1);
 
-        // 2. Token 拦截器 (解析身份)
+        // [建议新增] 1.5 注册 Sa-Token 注解拦截器，打开注解式鉴权功能
+        registry.addInterceptor(new cn.dev33.satoken.interceptor.SaInterceptor())
+                .addPathPatterns("/**")
+                .order(2);
+
+        // 2. Token 拦截器 (解析身份，已升级为 Sa-Token 桥接版)
         registry.addInterceptor(tokenInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(EXCLUDE_PATHS)
-                .order(2);
+                .order(3);
 
         // 3. 权限拦截器 (校验具体权限)
         if (authInterceptor != null) {
             registry.addInterceptor(authInterceptor)
-                    .addPathPatterns("/api/v1/users/**", "/api/v1/departments/**") // 敏感接口
-                    .order(3);
+                    .addPathPatterns("/api/v1/users/**", "/api/v1/departments/**")
+                    .order(4);
         }
     }
 

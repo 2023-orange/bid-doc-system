@@ -26,6 +26,12 @@ spring:
       host: localhost
       port: 6379
       database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 100ms
       # 如果有密码取消注释
       # password:
 
@@ -86,3 +92,26 @@ mybatis-plus:
 #        # 这里要改成你实际的 Controller 包路径
 #        api-rule-resources:
 #          - com.example.biddoc.controller
+
+sa-token:
+  # Token 名称 (也是前端 Header / Cookie 的名称)
+  token-name: Authorization
+  # Token 风格，结合 JWT 插件使用
+  token-style: uuid
+  # JWT 秘钥 (生产环境请务必替换为高强度随机字符串)
+  jwt-secret-key: bid-doc-system-super-secret-key-2026
+
+  # 【无感续期核心配置】
+  # 1. 物理有效期 (timeout): Token 在 Redis 中的绝对存活时间，单位: 秒。30天 = 2592000秒
+  # 最长只能登录 30 天，到期后必须重新输入密码。
+  timeout: 2592000
+  # 2. 临时有效期 (activity-timeout): 指定时间内无操作就踢下线，单位: 秒。30分钟 = 1800秒
+  # 用户只要有接口调用操作，Sa-Token 就会自动重置此时间，实现“只要在用就不会掉线”的无感续期体验。
+  activity-timeout: 1800
+
+  # 是否允许同一账号并发登录 (false: 新登录挤掉旧登录)
+  is-concurrent: false
+  # 多人登录同一账号时，是否共用一个token
+  is-share: false
+  # 是否输出操作日志
+  is-log: true
