@@ -19,6 +19,7 @@ public enum ErrorCode {
 
     // 权限
     PERMISSION_DENIED(4031001, "权限不足"),
+    ROLE_NOT_MATCH(4031002, "角色权限不匹配"),
 
     // 资源
     RESOURCE_NOT_FOUND(4041001, "资源不存在"),

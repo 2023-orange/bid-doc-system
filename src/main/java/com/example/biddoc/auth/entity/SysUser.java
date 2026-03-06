@@ -26,7 +26,6 @@ public class SysUser {
 
     private Long deptId;
     private Integer jobLevel;
-    private Long roleId;
 
     private Integer status;
     private Boolean deleted;

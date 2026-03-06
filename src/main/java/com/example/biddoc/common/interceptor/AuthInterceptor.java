@@ -1,6 +1,7 @@
 package com.example.biddoc.common.interceptor;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.example.biddoc.auth.constant.RoleCodeEnum;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,6 +9,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+/**
+ * 管理接口权限拦截器
+ * <p>
+ * /api/v1/users/** → 仅 SUPER_ADMIN<br/>
+ * /api/v1/departments/** → SUPER_ADMIN 或 DEPT_MANAGER
+ */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
 
@@ -15,17 +22,23 @@ public class AuthInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request,
                              HttpServletResponse response,
                              Object handler) {
-        // 【关键修复】如果是 OPTIONS 请求，直接放行，不校验 Token
-        // 这是跨域预检请求，浏览器自动发送，不会带 Token
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        // 【优化】不依赖 UserContext，直接通过 Sa-Token 校验当前用户是否具有 ADMIN 角色
-        // Sa-Token 的 StpInterface 接口来提供角色数据
-        if (!StpUtil.hasRole("ADMIN")) {
-            throw new BusinessException(ErrorCode.PERMISSION_DENIED);
+        String path = request.getRequestURI();
+
+        if (path.startsWith("/api/v1/users")) {
+            if (!StpUtil.hasRole(RoleCodeEnum.SUPER_ADMIN.getCode())) {
+                throw new BusinessException(ErrorCode.PERMISSION_DENIED);
+            }
+        } else if (path.startsWith("/api/v1/departments")) {
+            if (!StpUtil.hasRole(RoleCodeEnum.SUPER_ADMIN.getCode())
+                    && !StpUtil.hasRole(RoleCodeEnum.DEPT_MANAGER.getCode())) {
+                throw new BusinessException(ErrorCode.PERMISSION_DENIED);
+            }
         }
+
         return true;
     }
 }

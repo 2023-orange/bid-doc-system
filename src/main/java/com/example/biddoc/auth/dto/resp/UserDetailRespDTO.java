@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -14,8 +16,11 @@ public class UserDetailRespDTO {
     private String realName;
     private String email;
     private String mobile;
+    private Long deptId;
     private Integer jobLevel;
-    private String role;
     private Integer status;
+
+    /** 当前生效的角色码列表 */
+    private List<String> roleCodes;
 }
 
