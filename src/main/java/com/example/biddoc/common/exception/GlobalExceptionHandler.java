@@ -4,15 +4,15 @@ import cn.dev33.satoken.exception.NotLoginException;
 import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.exception.NotRoleException;
 import com.example.biddoc.common.result.ApiResponse;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
-
-import java.net.BindException;
 
 @Slf4j
 @RestControllerAdvice
@@ -29,7 +29,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BindException.class)
     public ApiResponse<Void> handleBindException(BindException ex) {
-        return ApiResponse.fail(ErrorCode.PARAM_INVALID, "参数绑定失败");
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> e.getField() + " " + e.getDefaultMessage())
+                .findFirst()
+                .orElse("参数绑定失败");
+        return ApiResponse.fail(ErrorCode.PARAM_INVALID, msg);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ApiResponse<Void> handleConstraintViolation(ConstraintViolationException ex) {
+        String msg = ex.getConstraintViolations().stream()
+                .map(v -> v.getPropertyPath() + " " + v.getMessage())
+                .findFirst()
+                .orElse("请求参数校验失败");
+        return ApiResponse.fail(ErrorCode.PARAM_INVALID, msg);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -42,8 +55,6 @@ public class GlobalExceptionHandler {
         log.warn("[业务异常] code={} msg={}", ex.getErrorCode().getCode(), ex.getMessage());
         return ApiResponse.fail(ex.getErrorCode(), ex.getMessage());
     }
-
-    // ========== Sa-Token 鉴权异常 ==========
 
     @ExceptionHandler(NotLoginException.class)
     public ApiResponse<Void> handleNotLogin(NotLoginException ex) {
@@ -62,8 +73,6 @@ public class GlobalExceptionHandler {
         log.warn("[权限不足] 缺少权限: {}", ex.getPermission());
         return ApiResponse.fail(ErrorCode.PERMISSION_DENIED, "操作权限不足");
     }
-
-    // ========== 通用异常 ==========
 
     @ExceptionHandler(NoHandlerFoundException.class)
     public ApiResponse<Void> handle404(NoHandlerFoundException ex) {
