@@ -7,7 +7,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum AuditModuleCodeEnum {
 
-    FOLDER("FOLDER", "文件夹模块");
+    FOLDER("FOLDER", "文件夹模块"),
+    DOCUMENT("DOCUMENT", "文档模块");
 
     private final String code;
     private final String name;

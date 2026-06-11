@@ -8,33 +8,6 @@ spring:
     active: dev
 
   # ===================================================================
-  # 数据库配置 (PostgreSQL)
-  # ===================================================================
-  datasource:
-    driver-class-name: org.postgresql.Driver
-    # PostgreSQL 默认端口 5432，不需要 useSSL 和 serverTimezone 参数
-    url: jdbc:postgresql://localhost:5432/bid_doc_system
-    # PostgreSQL 默认超级管理员是 postgres，如果你的用户名是 root 请自行修改
-    username: postgres
-    password: "1305174214"
-
-  # ===================================================================
-  # Redis 配置
-  # ===================================================================
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: ""
-      database: 0
-      lettuce:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: 100ms
-
-  # ===================================================================
   # MVC 异常处理配置
   # ===================================================================
   mvc:
@@ -51,9 +24,7 @@ spring:
       # 【关键】这里必须为 true (默认) 或者不写。
       # 如果设为 false，Knife4j/Swagger 的 doc.html 页面将无法加载 (报 404)
       add-mappings: true
-  logging:
-    pattern:
-      console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
+
 # ===================================================================
 # MyBatis Plus 配置
 # ===================================================================
@@ -65,47 +36,28 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
-      # 逻辑删除字段 (0:未删除, 1:已删除)
+      # 逻辑删除字段
       logic-delete-field: deleted
-      # 逻辑已删除值 (Postgres 使用字符串 'true')
-      logic-delete-value: "true"
-      # 逻辑未删除值 (Postgres 使用字符串 'false')
-      logic-not-delete-value: "false"
+      # 逻辑已删除值 (PostgreSQL BOOLEAN 类型使用布尔值)
+      logic-delete-value: true
+      # 逻辑未删除值 (PostgreSQL BOOLEAN 类型使用布尔值)
+      logic-not-delete-value: false
 
-## ===================================================================
-## Knife4j (Swagger) 接口文档配置
-## ===================================================================
-#knife4j:
-#  enable: true
-#  openapi:
-#    title: 文档管理系统 API 文档
-##    description: 统一异常处理与基础架构测试
-##    email: admin@example.com
-#    concat: 管理员
-#    url: https://example.com
-#    version: v1.0.0
-#    group:
-#      default:
-#        group-name: 默认分组
-#        api-rule: package
-#        # 这里要改成你实际的 Controller 包路径
-#        api-rule-resources:
-#          - com.example.biddoc.controller
-
+# ===================================================================
+# Sa-Token 配置（非敏感部分）
+# ===================================================================
 sa-token:
   # Token 名称 (也是前端 Header / Cookie 的名称)
   token-name: Authorization
   # Token 风格，结合 JWT 插件使用
   token-style: uuid
-  # JWT 秘钥 (生产环境请务必替换为高强度随机字符串)
-  jwt-secret-key: bid-doc-system-super-secret-key-2026
+  # Token 前缀（暂时设为空，待验证通过后再启用 Bearer 前缀）
+  token-prefix: ""
 
   # 【无感续期核心配置】
   # 1. 物理有效期 (timeout): Token 在 Redis 中的绝对存活时间，单位: 秒。30天 = 2592000秒
-  # 最长只能登录 30 天，到期后必须重新输入密码。
   timeout: 2592000
   # 2. 临时有效期 (activity-timeout): 指定时间内无操作就踢下线，单位: 秒。30分钟 = 1800秒
-  # 用户只要有接口调用操作，Sa-Token 就会自动重置此时间，实现“只要在用就不会掉线”的无感续期体验。
   activity-timeout: 1800
 
   # 是否允许同一账号并发登录 (false: 新登录挤掉旧登录)
@@ -114,3 +66,10 @@ sa-token:
   is-share: false
   # 是否输出操作日志
   is-log: true
+
+# ===================================================================
+# Logging 配置（Goal-0: 修复缩进，从 spring.logging 提到顶层）
+# ===================================================================
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"

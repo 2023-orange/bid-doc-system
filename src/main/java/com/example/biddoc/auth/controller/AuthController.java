@@ -37,7 +37,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ApiResponse<LoginRespDTO> login(@Valid @RequestBody LoginReqDTO req) {
-        SaTokenInfo tokenInfo = authService.login(req.getUsername(), req.getPassword());
+        SaTokenInfo tokenInfo = authService.login(req.getUsername(), req.getPassword(), req.getRememberMe());
 
         SysUser user = (SysUser) StpUtil.getSession().get("user");
 

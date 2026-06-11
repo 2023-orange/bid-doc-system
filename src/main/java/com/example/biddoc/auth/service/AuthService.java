@@ -10,6 +10,6 @@ public interface AuthService {
     /**
      * 用户登录，返回 Sa-Token 令牌信息
      */
-    SaTokenInfo login(String username, String password);
+    SaTokenInfo login(String username, String password, Boolean rememberMe);
 }
 

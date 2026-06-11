@@ -26,11 +26,50 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND(4041001, "资源不存在"),
     FOLDER_NOT_FOUND(4042001, "文件夹不存在"),
     FOLDER_PARENT_NOT_FOUND(4042002, "父文件夹不存在"),
+    // 4042003/4042004 用于 folder 模块二级资源（授权记录、管理员记录）的"不存在"语义
+    FOLDER_GRANT_NOT_FOUND(4042003, "授权记录不存在"),
+    FOLDER_MANAGER_NOT_FOUND(4042004, "管理员记录不存在"),
 
     // Folder
     FOLDER_NAME_DUPLICATED(4002001, "同级文件夹名称已存在"),
     FOLDER_LEVEL_EXCEEDED(4002002, "文件夹层级超出限制"),
     FOLDER_HAS_CHILDREN(4002003, "当前文件夹存在子节点"),
+    // 4002004 起为 folder Phase 3（授权/管理员）业务校验错误码
+    FOLDER_GRANT_DUPLICATED(4002004, "授权已存在"),
+    FOLDER_GRANT_ON_ROOT_FORBIDDEN(4002005, "根级文件夹不允许授权"),
+    FOLDER_GRANT_SUBJECT_INVALID(4002006, "授权主体非法"),
+    FOLDER_MANAGER_DUPLICATED(4002007, "该用户已是管理员"),
+    // 4002008 起为 folder Phase 4（move/copy/delete）业务校验错误码
+    FOLDER_CYCLE_NOT_ALLOWED(4002008, "不能移动到自身或子目录下"),
+    FOLDER_MOVE_TARGET_INVALID(4002009, "目标父目录无效"),
+    // 4222001：业务前置不满足（语义贴近 HTTP 422），区别于 4032001 的"权限不足"
+    FOLDER_MANAGER_REQUIRES_ROLE(4222001, "用户未具备 FOLDER_ADMIN 角色"),
+
+    // Document (4002xxx 业务校验 / 4042xxx 资源 / 4032xxx 权限 / 5005xxx 存储)
+    DOCUMENT_FILE_REQUIRED(4002101, "上传文件不能为空"),
+    DOCUMENT_SIZE_EXCEEDED(4002102, "文件大小超出限制"),
+    DOCUMENT_NAME_INVALID(4002103, "文档名称非法"),
+    DOCUMENT_NAME_DUPLICATED(4002104, "同文件夹下文档名称已存在"),
+    DOCUMENT_ROOT_FOLDER_FORBIDDEN(4002105, "根级文件夹不允许直接上传文档"),
+    DOCUMENT_PREVIEW_UNSUPPORTED(4002106, "当前文件类型不支持预览"),
+
+    DOCUMENT_NOT_FOUND(4042101, "文档不存在"),
+    DOCUMENT_VERSION_NOT_FOUND(4042102, "文档版本不存在"),
+
+    DOCUMENT_OWNERSHIP_REQUIRED(4032101, "仅文档所有者、文件夹管理员或超级管理员可执行此操作"),
+
+    STORAGE_WRITE_FAILED(5005001, "文件存储写入失败"),
+    STORAGE_OBJECT_NOT_FOUND(5005002, "存储对象不存在"),
+    STORAGE_READ_FAILED(5005003, "文件存储读取失败"),
+
+    // Tag / Notify / Workflow
+    TAG_NAME_DUPLICATED(4002201, "标签名称已存在"),
+    TAG_NOT_FOUND(4042201, "标签不存在"),
+    NOTIFICATION_NOT_FOUND(4043001, "通知不存在"),
+    APPROVAL_TASK_NOT_FOUND(4044001, "审批任务不存在"),
+    APPROVAL_INSTANCE_NOT_FOUND(4044002, "审批实例不存在"),
+    APPROVAL_TASK_NOT_PENDING(4004001, "审批任务不是待处理状态"),
+    APPROVAL_APPROVER_INVALID(4034001, "无权处理该审批任务"),
 
     // Audit
     AUDIT_RECORD_FAILED(5003001, "审计记录失败"),

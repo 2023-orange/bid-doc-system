@@ -12,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 @Slf4j
@@ -50,6 +51,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.fail(ErrorCode.PARAM_INVALID, "请求体格式错误");
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ApiResponse<Void> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        log.warn("[文件大小超限] {}", ex.getMessage());
+        return ApiResponse.fail(ErrorCode.DOCUMENT_SIZE_EXCEEDED, "文件大小超出限制");
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusiness(BusinessException ex) {
         log.warn("[业务异常] code={} msg={}", ex.getErrorCode().getCode(), ex.getMessage());
@@ -65,7 +72,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotRoleException.class)
     public ApiResponse<Void> handleNotRole(NotRoleException ex) {
         log.warn("[角色不足] 缺少角色: {}", ex.getRole());
-        return ApiResponse.fail(ErrorCode.PERMISSION_DENIED, "角色权限不足");
+        return ApiResponse.fail(ErrorCode.ROLE_NOT_MATCH, "角色权限不足");
     }
 
     @ExceptionHandler(NotPermissionException.class)

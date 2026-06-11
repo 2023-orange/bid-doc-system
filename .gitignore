@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 .verify-logs/
+
+### Goal-1: Local storage ###
+.local-storage/

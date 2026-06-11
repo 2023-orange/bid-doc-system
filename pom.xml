@@ -157,6 +157,48 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
         </dependency>
+
+        <!-- ================================================= -->
+        <!-- Goal-0: 项目地基修复 -->
+        <!-- ================================================= -->
+        <!-- Spring Security Crypto (仅用于 BCrypt 密码加密，不引入完整 Security 框架) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <!-- Flyway 数据库迁移 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
+        <!-- ================================================= -->
+        <!-- Goal-1: Document 模块 MVP -->
+        <!-- ================================================= -->
+        <!-- Apache Tika (MIME 类型探测) -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>2.9.2</version>
+        </dependency>
+
+        <!-- ================================================= -->
+        <!-- Goal-2: MinIO 对象存储集成 -->
+        <!-- ================================================= -->
+        <!-- MinIO Java SDK -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.7</version>
+        </dependency>
+
+        <!-- 测试基础设施：JUnit 5、Mockito、Spring Boot 测试工具 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

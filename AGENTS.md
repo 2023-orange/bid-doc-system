@@ -68,6 +68,7 @@ Confirmed from repository files:
 - Database: PostgreSQL
 - Cache / session-related dependency: Redis
 - Authentication / authorization: Sa-Token
+- Database migration dependency: Flyway is present, but the local `dev` profile currently disables automatic migration while the project is still under active development. Re-enable and verify migration ordering before treating Flyway startup migration as active behavior.
 
 Agent rules:
 - Treat the stack as repository-derived, not assumption-derived.
@@ -115,6 +116,8 @@ Agent rules:
 - If a repository rule is not consistent yet, state that directly instead of pretending it is settled.
 - Never promote an unverified inference into a claimed current fact.
 - If behavior matters, inspect the implementation before changing it.
+- During testing and verification, if existing database data cannot satisfy the validation scenario, it is allowed to write SQL to insert temporary test data for testing; the user's IDEA is connected to the database and can be used for database-backed validation when appropriate.
+- 中文注释：测试数据不足时可通过 IDEA 连接的数据库写入临时 SQL 数据，但应限制在测试验证场景并说明影响。
 
 ## Code Comment Rules
 

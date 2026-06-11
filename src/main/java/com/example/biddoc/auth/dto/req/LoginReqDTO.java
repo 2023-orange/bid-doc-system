@@ -15,5 +15,6 @@ public class LoginReqDTO {
 
     @NotBlank(message = "密码不能为空")
     private String password;
-}
 
+    private Boolean rememberMe;
+}
