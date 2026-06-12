@@ -313,6 +313,7 @@ public class DocumentServiceImpl implements DocumentService {
             searchReq = new DocumentSearchReqDTO();
         }
         searchReq.setDocumentStatus("APPROVED");
+        searchReq.setExcludeExpired(true);
         return searchDocuments(searchReq);
     }
 
@@ -1065,6 +1066,11 @@ public class DocumentServiceImpl implements DocumentService {
         if (Boolean.TRUE.equals(searchReq.getExpiredOnly())) {
             wrapper.eq(DocumentEntity::getHasExpireDate, true)
                     .lt(DocumentEntity::getExpireDate, java.time.OffsetDateTime.now());
+        }
+        if (Boolean.TRUE.equals(searchReq.getExcludeExpired())) {
+            wrapper.and(q -> q.ne(DocumentEntity::getHasExpireDate, true)
+                    .or()
+                    .ge(DocumentEntity::getExpireDate, java.time.OffsetDateTime.now()));
         }
         if (searchReq.getOwnerUserId() != null) {
             wrapper.eq(DocumentEntity::getOwnerUserId, searchReq.getOwnerUserId());

@@ -116,6 +116,9 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         if ("VOIDED".equals(document.getDocumentStatus()) || "DELETED".equals(document.getDocumentStatus())) {
             throw new BusinessException(ErrorCode.BUSINESS_ILLEGAL, "作废或删除资料不能绑定清单");
         }
+        if (isExpired(document)) {
+            throw new BusinessException(ErrorCode.DOCUMENT_EXPIRED);
+        }
 
         ProjectChecklistDocumentEntity binding = new ProjectChecklistDocumentEntity();
         binding.setId(IdWorker.getId());
@@ -181,7 +184,11 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         }
         for (ProjectChecklistDocumentEntity binding : bindings) {
             DocumentEntity document = documentMapper.selectById(binding.getDocumentId());
-            if (document == null || !"APPROVED".equals(document.getDocumentStatus())) {
+            if (document == null
+                    || Boolean.TRUE.equals(document.getDeleted())
+                    || !"APPROVED".equals(document.getDocumentStatus())
+                    || "VOIDED".equals(document.getDocumentStatus())
+                    || isExpired(document)) {
                 return false;
             }
         }
@@ -198,11 +205,17 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         }
         for (ProjectChecklistDocumentEntity binding : bindings) {
             DocumentEntity document = documentMapper.selectById(binding.getDocumentId());
-            if (document != null && "REJECTED".equals(document.getDocumentStatus())) {
+            if (document != null && ("REJECTED".equals(document.getDocumentStatus()) || isExpired(document))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean isExpired(DocumentEntity document) {
+        return Boolean.TRUE.equals(document.getHasExpireDate())
+                && document.getExpireDate() != null
+                && document.getExpireDate().isBefore(OffsetDateTime.now());
     }
 
     private ProjectChecklistItemEntity requireItem(Long itemId) {

@@ -73,6 +73,11 @@ public class DocumentSearchReqDTO {
     private Boolean expiredOnly = false;
 
     /**
+     * 内部查询开关：可绑定资料默认排除过期记录，不作为前端公开筛选项使用。
+     */
+    private Boolean excludeExpired = false;
+
+    /**
      * 排序字段
      * 可选值: name, size, createdAt, updatedAt
      * 默认: createdAt
