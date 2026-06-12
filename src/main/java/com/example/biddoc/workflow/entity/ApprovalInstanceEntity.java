@@ -21,6 +21,7 @@ public class ApprovalInstanceEntity {
     private String bizModule;
     private String bizType;
     private Long bizId;
+    private Integer versionNo;
     private String scenario;
     private Long submitterUserId;
     private String status;

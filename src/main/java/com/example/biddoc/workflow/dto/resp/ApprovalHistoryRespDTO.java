@@ -9,6 +9,8 @@ public class ApprovalHistoryRespDTO {
 
     private Long instanceId;
     private Long documentId;
+    private Integer versionNo;
+    private String bizType;
     private Long submitterUserId;
     private String instanceStatus;
     private String submitComment;

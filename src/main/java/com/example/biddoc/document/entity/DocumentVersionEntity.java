@@ -70,6 +70,21 @@ public class DocumentVersionEntity {
     private String changeLog;
 
     /**
+     * 版本审批状态：首版本默认为 APPROVED，新上传版本默认 PENDING，审批通过后才可切为当前版本。
+     */
+    private String approvalStatus;
+
+    /**
+     * 审批通过时间。
+     */
+    private OffsetDateTime approvedAt;
+
+    /**
+     * 审批驳回原因。
+     */
+    private String rejectedReason;
+
+    /**
      * 创建时间
      */
     @TableField(fill = FieldFill.INSERT)

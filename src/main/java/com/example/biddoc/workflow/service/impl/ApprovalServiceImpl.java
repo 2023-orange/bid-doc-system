@@ -10,7 +10,9 @@ import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.document.entity.DocumentEntity;
+import com.example.biddoc.document.entity.DocumentVersionEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.document.mapper.DocumentVersionMapper;
 import com.example.biddoc.document.service.DocumentService;
 import com.example.biddoc.folder.entity.FolderEntity;
 import com.example.biddoc.folder.mapper.FolderMapper;
@@ -52,6 +54,7 @@ public class ApprovalServiceImpl implements ApprovalService {
     private final ApprovalInstanceMapper approvalInstanceMapper;
     private final ApprovalTaskMapper approvalTaskMapper;
     private final DocumentMapper documentMapper;
+    private final DocumentVersionMapper documentVersionMapper;
     private final FolderMapper folderMapper;
     private final FolderPermissionService folderPermissionService;
     private final AuditService auditService;
@@ -131,11 +134,70 @@ public class ApprovalServiceImpl implements ApprovalService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long submitVersion(Long documentId, Integer versionNo, String comment) {
-        return submit(documentId, comment);
+        UserContext.UserInfo user = requireCurrentUser();
+        DocumentEntity document = documentMapper.selectById(documentId);
+        if (document == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        DocumentVersionEntity version = documentVersionMapper.selectOne(Wrappers.<DocumentVersionEntity>lambdaQuery()
+                .eq(DocumentVersionEntity::getDocumentId, documentId)
+                .eq(DocumentVersionEntity::getVersionNo, versionNo)
+                .eq(DocumentVersionEntity::getDeleted, false));
+        if (version == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_VERSION_NOT_FOUND);
+        }
+        FolderEntity folder = folderMapper.selectById(document.getFolderId());
+        if (folder == null) {
+            throw new BusinessException(ErrorCode.FOLDER_NOT_FOUND);
+        }
+        folderPermissionService.checkView(folder);
+
+        Long approverUserId = resolveApprover(folder, user.getUserId());
+        Long instanceId = IdWorker.getId();
+        Long taskId = IdWorker.getId();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ApprovalInstanceEntity instance = new ApprovalInstanceEntity();
+        instance.setId(instanceId);
+        instance.setDocumentId(documentId);
+        instance.setBizModule("DOCUMENT");
+        instance.setBizType("DOCUMENT_VERSION");
+        instance.setBizId(documentId);
+        instance.setVersionNo(versionNo);
+        instance.setScenario("DOCUMENT_VERSION_APPROVAL");
+        instance.setSubmitterUserId(user.getUserId());
+        instance.setStatus(STATUS_PENDING);
+        instance.setSubmitComment(comment);
+        instance.setSubmittedAt(now);
+        instance.setDeleted(Boolean.FALSE);
+        approvalInstanceMapper.insert(instance);
+
+        ApprovalTaskEntity task = new ApprovalTaskEntity();
+        task.setId(taskId);
+        task.setInstanceId(instanceId);
+        task.setDocumentId(documentId);
+        task.setApproverUserId(approverUserId);
+        task.setStatus(STATUS_PENDING);
+        task.setDeleted(Boolean.FALSE);
+        approvalTaskMapper.insert(task);
+
+        documentService.markVersionApproving(documentId, versionNo);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType("DOCUMENT_VERSION")
+                .bizId(documentId)
+                .operationType(AuditOperationTypeEnum.APPROVAL_SUBMIT.getCode())
+                .afterData(Map.of("instanceId", String.valueOf(instanceId), "versionNo", versionNo))
+                .build());
+        notificationService.send(approverUserId, "WORKFLOW_TASK", "新的文档版本审批任务",
+                "请审批文档版本：" + document.getName() + " v" + versionNo, "DOCUMENT", documentId);
+        return instanceId;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long submitChecklistItem(Long projectId, Long itemId, String comment) {
         UserContext.UserInfo user = requireCurrentUser();
         ProjectChecklistItemEntity item = projectChecklistItemMapper.selectById(itemId);
@@ -262,6 +324,9 @@ public class ApprovalServiceImpl implements ApprovalService {
         // 审批完成必须回写业务对象；按 bizType 分发，避免把流程结果和业务状态割裂。
         if ("CHECKLIST_ITEM".equals(instance.getBizType())) {
             projectChecklistService.recalculateItemStatus(instance.getBizId());
+        } else if ("DOCUMENT_VERSION".equals(instance.getBizType())) {
+            documentService.markVersionApprovalResult(instance.getDocumentId(), instance.getVersionNo(),
+                    STATUS_APPROVED.equals(finalStatus), comment);
         } else {
             documentService.markApprovalResult(instance.getDocumentId(), STATUS_APPROVED.equals(finalStatus), comment);
         }
@@ -334,6 +399,8 @@ public class ApprovalServiceImpl implements ApprovalService {
         ApprovalHistoryRespDTO dto = new ApprovalHistoryRespDTO();
         dto.setInstanceId(instance.getId());
         dto.setDocumentId(instance.getDocumentId());
+        dto.setVersionNo(instance.getVersionNo());
+        dto.setBizType(instance.getBizType());
         dto.setSubmitterUserId(instance.getSubmitterUserId());
         dto.setInstanceStatus(instance.getStatus());
         dto.setSubmitComment(instance.getSubmitComment());

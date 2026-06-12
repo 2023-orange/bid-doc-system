@@ -4,6 +4,7 @@ import com.example.biddoc.audit.service.AuditService;
 import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.document.mapper.DocumentVersionMapper;
 import com.example.biddoc.document.service.DocumentService;
 import com.example.biddoc.folder.entity.FolderEntity;
 import com.example.biddoc.folder.mapper.FolderMapper;
@@ -35,6 +36,7 @@ class ApprovalServiceImplTest {
     private final ApprovalInstanceMapper approvalInstanceMapper = mock(ApprovalInstanceMapper.class);
     private final ApprovalTaskMapper approvalTaskMapper = mock(ApprovalTaskMapper.class);
     private final DocumentMapper documentMapper = mock(DocumentMapper.class);
+    private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
     private final FolderMapper folderMapper = mock(FolderMapper.class);
     private final FolderPermissionService folderPermissionService = mock(FolderPermissionService.class);
     private final AuditService auditService = mock(AuditService.class);
@@ -48,6 +50,7 @@ class ApprovalServiceImplTest {
             approvalInstanceMapper,
             approvalTaskMapper,
             documentMapper,
+            documentVersionMapper,
             folderMapper,
             folderPermissionService,
             auditService,

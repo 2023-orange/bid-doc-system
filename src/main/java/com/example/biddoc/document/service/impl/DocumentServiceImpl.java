@@ -45,6 +45,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -70,6 +71,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     private static final Tika TIKA = new Tika();
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    private static final String VERSION_PENDING = "PENDING";
+    private static final String VERSION_APPROVED = "APPROVED";
+    private static final String VERSION_REJECTED = "REJECTED";
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -128,6 +132,8 @@ public class DocumentServiceImpl implements DocumentService {
             version.setContentHash(contentHash);
             version.setUploadedByUserId(currentUser.getUserId());
             version.setChangeLog(changeLog);
+            version.setApprovalStatus(VERSION_APPROVED);
+            version.setApprovedAt(OffsetDateTime.now());
             documentVersionMapper.insert(version);
 
             // 11. 插入文档记录
@@ -274,6 +280,19 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional(rollbackFor = Exception.class)
     public void markApprovalResult(Long documentId, boolean approved, String reason) {
         updateDocumentStatus(documentId, approved ? "APPROVED" : "REJECTED", reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markVersionApproving(Long documentId, Integer versionNo) {
+        updateVersionApprovalStatus(documentId, versionNo, VERSION_PENDING, null, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markVersionApprovalResult(Long documentId, Integer versionNo, boolean approved, String reason) {
+        updateVersionApprovalStatus(documentId, versionNo,
+                approved ? VERSION_APPROVED : VERSION_REJECTED, reason, approved);
     }
 
     @Override
@@ -432,8 +451,8 @@ public class DocumentServiceImpl implements DocumentService {
 
         AssertUtil.isTrue(isSuperAdmin || isOwner || isManager, ErrorCode.DOCUMENT_OWNERSHIP_REQUIRED);
 
-        // 4. 计算下一个版本号
-        int nextVersionNo = document.getCurrentVersionNo() + 1;
+        // 4. 版本号按历史最大值递增，避免当前版本停留在旧版本时重复生成待审批版本号。
+        int nextVersionNo = nextVersionNo(documentId);
 
         try {
             // 5. 写入存储
@@ -460,13 +479,10 @@ public class DocumentServiceImpl implements DocumentService {
             version.setContentHash(contentHash);
             version.setUploadedByUserId(currentUser.getUserId());
             version.setChangeLog(changeLog);
+            version.setApprovalStatus(VERSION_PENDING);
             documentVersionMapper.insert(version);
 
-            // 9. 更新文档主表
-            document.setCurrentVersionNo(nextVersionNo);
-            document.setLatestSize(file.getSize());
-            document.setLatestMime(mimeType);
-            documentMapper.updateById(document);
+            // 9. 新版本需要审批通过后才切换 currentVersionNo，避免未通过版本污染当前可用资料。
 
             // 10. 审计
             Map<String, Object> beforeData = new HashMap<>();
@@ -477,8 +493,8 @@ public class DocumentServiceImpl implements DocumentService {
             afterData.put("newVersionNo", nextVersionNo);
             afterData.put("size", file.getSize());
             afterData.put("mimeType", mimeType);
-            afterData.put("storageKey", storageKey);
             afterData.put("originalFilename", file.getOriginalFilename());
+            afterData.put("approvalStatus", VERSION_PENDING);
 
             Map<String, Object> extraData = new HashMap<>();
             extraData.put("contentHash", contentHash);
@@ -894,6 +910,9 @@ public class DocumentServiceImpl implements DocumentService {
         dto.setUploadedByUserId(String.valueOf(version.getUploadedByUserId()));
         dto.setUploadedAt(version.getCreatedAt());
         dto.setChangeLog(version.getChangeLog());
+        dto.setApprovalStatus(version.getApprovalStatus());
+        dto.setApprovedAt(version.getApprovedAt());
+        dto.setRejectedReason(version.getRejectedReason());
         return dto;
     }
 
@@ -1400,6 +1419,57 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
         }
         return document;
+    }
+
+    private int nextVersionNo(Long documentId) {
+        DocumentVersionEntity latest = documentVersionMapper.selectOne(new LambdaQueryWrapper<DocumentVersionEntity>()
+                .eq(DocumentVersionEntity::getDocumentId, documentId)
+                .orderByDesc(DocumentVersionEntity::getVersionNo)
+                .last("limit 1"));
+        return latest == null ? 1 : latest.getVersionNo() + 1;
+    }
+
+    private DocumentVersionEntity requireVersion(Long documentId, Integer versionNo) {
+        DocumentVersionEntity version = documentVersionMapper.selectOne(new LambdaQueryWrapper<DocumentVersionEntity>()
+                .eq(DocumentVersionEntity::getDocumentId, documentId)
+                .eq(DocumentVersionEntity::getVersionNo, versionNo));
+        if (version == null || Boolean.TRUE.equals(version.getDeleted())) {
+            throw new BusinessException(ErrorCode.DOCUMENT_VERSION_NOT_FOUND);
+        }
+        return version;
+    }
+
+    private void updateVersionApprovalStatus(Long documentId, Integer versionNo, String status,
+                                             String reason, boolean switchCurrentVersion) {
+        DocumentEntity document = requireDocumentForLifecycle(documentId);
+        FolderEntity folder = folderMapper.selectById(document.getFolderId());
+        AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
+        folderPermissionService.checkView(folder);
+
+        DocumentVersionEntity version = requireVersion(documentId, versionNo);
+        DocumentVersionEntity update = new DocumentVersionEntity();
+        update.setId(version.getId());
+        update.setApprovalStatus(status);
+        update.setRejectedReason(VERSION_REJECTED.equals(status) ? reason : null);
+        update.setApprovedAt(VERSION_APPROVED.equals(status) ? OffsetDateTime.now() : null);
+        documentVersionMapper.updateById(update);
+
+        if (switchCurrentVersion) {
+            DocumentEntity documentUpdate = new DocumentEntity();
+            documentUpdate.setId(documentId);
+            documentUpdate.setCurrentVersionNo(versionNo);
+            documentUpdate.setLatestSize(version.getSize());
+            documentUpdate.setLatestMime(version.getMimeType());
+            documentMapper.updateById(documentUpdate);
+        }
+
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType("DOCUMENT_VERSION")
+                .bizId(documentId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("versionNo", versionNo, "approvalStatus", status))
+                .build());
     }
 
     private void updateDocumentStatus(Long documentId, String status, String reason) {

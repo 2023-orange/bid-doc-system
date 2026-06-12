@@ -48,4 +48,19 @@ public class DocumentVersionRespDTO {
      * 版本变更说明
      */
     private String changeLog;
+
+    /**
+     * 审批状态：PENDING / APPROVED / REJECTED
+     */
+    private String approvalStatus;
+
+    /**
+     * 审批通过时间
+     */
+    private OffsetDateTime approvedAt;
+
+    /**
+     * 驳回原因
+     */
+    private String rejectedReason;
 }
