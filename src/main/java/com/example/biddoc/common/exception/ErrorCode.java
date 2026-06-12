@@ -75,6 +75,7 @@ public enum ErrorCode {
     PROJECT_OWNER_REQUIRED(4005001, "项目至少需要一个负责人"),
     PROJECT_DEPT_ABBR_REQUIRED(4005002, "项目所属部门未配置事业部缩写"),
     PROJECT_ARCHIVED_READONLY(4005003, "已归档项目不允许修改"),
+    PROJECT_ARCHIVE_CHECKLIST_INCOMPLETE(4005004, "必需清单项未完成，不能归档"),
     PROJECT_NOT_FOUND(4045001, "项目不存在"),
     PROJECT_PERMISSION_DENIED(4035001, "无项目操作权限"),
 

@@ -12,6 +12,7 @@ import com.example.biddoc.project.entity.ProjectEntity;
 import com.example.biddoc.project.entity.ProjectMemberEntity;
 import com.example.biddoc.project.entity.ProjectNoSequenceEntity;
 import com.example.biddoc.project.mapper.ProjectMapper;
+import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
 import com.example.biddoc.project.mapper.ProjectMemberMapper;
 import com.example.biddoc.project.mapper.ProjectNoSequenceMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -34,6 +35,7 @@ class ProjectServiceImplTest {
     private final ProjectMapper projectMapper = mock(ProjectMapper.class);
     private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
     private final ProjectNoSequenceMapper sequenceMapper = mock(ProjectNoSequenceMapper.class);
+    private final ProjectChecklistItemMapper checklistItemMapper = mock(ProjectChecklistItemMapper.class);
     private final SysDepartmentMapper departmentMapper = mock(SysDepartmentMapper.class);
     private final AuditService auditService = mock(AuditService.class);
     private final NotificationService notificationService = mock(NotificationService.class);
@@ -41,6 +43,7 @@ class ProjectServiceImplTest {
             projectMapper,
             projectMemberMapper,
             sequenceMapper,
+            checklistItemMapper,
             departmentMapper,
             auditService,
             notificationService

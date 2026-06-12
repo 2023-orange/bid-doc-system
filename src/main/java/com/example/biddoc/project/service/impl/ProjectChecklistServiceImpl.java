@@ -43,6 +43,7 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
     @Transactional(rollbackFor = Exception.class)
     public void generateFromTemplate(Long projectId, Long templateId) {
         projectPermissionService.checkManage(projectId);
+        ensureProjectEditable(projectId);
         ChecklistTemplateEntity template = templateMapper.selectById(templateId);
         if (template == null || !Boolean.TRUE.equals(template.getEnabled())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单模板不存在或未启用");
@@ -90,6 +91,7 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不属于当前项目");
         }
         projectPermissionService.checkManage(projectId);
+        ensureProjectEditable(projectId);
         ProjectChecklistItemEntity update = new ProjectChecklistItemEntity();
         update.setId(itemId);
         update.setOwnerUserId(ownerUserId);
@@ -105,11 +107,8 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         if (!projectId.equals(item.getProjectId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不属于当前项目");
         }
-        projectPermissionService.checkManageOrOwner(projectId, item.getOwnerUserId());
-        ProjectEntity project = projectMapper.selectById(projectId);
-        if (project != null && ProjectStatusEnum.ARCHIVED.getCode().equals(project.getProjectStatus())) {
-            throw new BusinessException(ErrorCode.PROJECT_ARCHIVED_READONLY);
-        }
+        projectPermissionService.checkChecklistMaintain(projectId, item.getOwnerUserId());
+        ensureProjectEditable(projectId);
         DocumentEntity document = documentMapper.selectById(documentId);
         if (document == null || Boolean.TRUE.equals(document.getDeleted())) {
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
@@ -137,7 +136,8 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         if (!projectId.equals(item.getProjectId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不属于当前项目");
         }
-        projectPermissionService.checkManageOrOwner(projectId, item.getOwnerUserId());
+        projectPermissionService.checkChecklistMaintain(projectId, item.getOwnerUserId());
+        ensureProjectEditable(projectId);
         ProjectChecklistDocumentEntity update = new ProjectChecklistDocumentEntity();
         update.setDeleted(Boolean.TRUE);
         checklistDocumentMapper.update(update, new LambdaQueryWrapper<ProjectChecklistDocumentEntity>()
@@ -211,6 +211,13 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不存在");
         }
         return item;
+    }
+
+    private void ensureProjectEditable(Long projectId) {
+        ProjectEntity project = projectMapper.selectById(projectId);
+        if (project != null && ProjectStatusEnum.ARCHIVED.getCode().equals(project.getProjectStatus())) {
+            throw new BusinessException(ErrorCode.PROJECT_ARCHIVED_READONLY);
+        }
     }
 
     private int minCount(ProjectChecklistItemEntity item) {

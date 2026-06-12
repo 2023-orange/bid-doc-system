@@ -14,6 +14,7 @@ import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.common.result.PageResponse;
 import com.example.biddoc.notify.service.NotificationService;
+import com.example.biddoc.project.constant.ChecklistItemStatusEnum;
 import com.example.biddoc.project.constant.ProjectMemberRoleEnum;
 import com.example.biddoc.project.constant.ProjectStageEnum;
 import com.example.biddoc.project.constant.ProjectStatusEnum;
@@ -21,9 +22,11 @@ import com.example.biddoc.project.dto.req.ProjectCreateReqDTO;
 import com.example.biddoc.project.dto.req.ProjectMemberSaveReqDTO;
 import com.example.biddoc.project.dto.req.ProjectUpdateReqDTO;
 import com.example.biddoc.project.dto.resp.ProjectRespDTO;
+import com.example.biddoc.project.entity.ProjectChecklistItemEntity;
 import com.example.biddoc.project.entity.ProjectEntity;
 import com.example.biddoc.project.entity.ProjectMemberEntity;
 import com.example.biddoc.project.entity.ProjectNoSequenceEntity;
+import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
 import com.example.biddoc.project.mapper.ProjectMapper;
 import com.example.biddoc.project.mapper.ProjectMemberMapper;
 import com.example.biddoc.project.mapper.ProjectNoSequenceMapper;
@@ -51,6 +54,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectMapper projectMapper;
     private final ProjectMemberMapper projectMemberMapper;
     private final ProjectNoSequenceMapper sequenceMapper;
+    private final ProjectChecklistItemMapper checklistItemMapper;
     private final SysDepartmentMapper departmentMapper;
     private final AuditService auditService;
     private final NotificationService notificationService;
@@ -177,6 +181,7 @@ public class ProjectServiceImpl implements ProjectService {
     public void changeStage(Long projectId, String projectStage) {
         ProjectEntity project = requireProject(projectId);
         checkManage(project);
+        ensureEditable(project);
         project.setProjectStage(projectStage);
         projectMapper.updateById(project);
         recordAudit(projectId, AuditOperationTypeEnum.UPDATE.getCode(), Map.of("projectStage", projectStage));
@@ -187,9 +192,22 @@ public class ProjectServiceImpl implements ProjectService {
     public void changeStatus(Long projectId, String projectStatus) {
         ProjectEntity project = requireProject(projectId);
         checkManage(project);
+        if (!ProjectStatusEnum.ARCHIVED.getCode().equals(projectStatus)) {
+            ensureEditable(project);
+        }
+        if (ProjectStatusEnum.ARCHIVED.getCode().equals(projectStatus)) {
+            ensureCanArchive(projectId);
+            archiveChecklist(projectId);
+        }
         project.setProjectStatus(projectStatus);
+        if (ProjectStatusEnum.ARCHIVED.getCode().equals(projectStatus)) {
+            project.setProjectStage(ProjectStageEnum.ARCHIVED.getCode());
+        }
         projectMapper.updateById(project);
         recordAudit(projectId, AuditOperationTypeEnum.UPDATE.getCode(), Map.of("projectStatus", projectStatus));
+        if (ProjectStatusEnum.ARCHIVED.getCode().equals(projectStatus)) {
+            notifyProjectMembers(projectId, project.getProjectName(), "PROJECT_ARCHIVED", "投标项目已归档");
+        }
     }
 
     private String generateProjectNo(Long deptId) {
@@ -277,8 +295,30 @@ public class ProjectServiceImpl implements ProjectService {
 
     private void ensureEditable(ProjectEntity project) {
         if (Objects.equals(project.getProjectStatus(), ProjectStatusEnum.ARCHIVED.getCode())) {
+            recordAudit(project.getId(), AuditOperationTypeEnum.UPDATE.getCode(),
+                    Map.of("rejected", true, "reason", "PROJECT_ARCHIVED_READONLY"));
             throw new BusinessException(ErrorCode.PROJECT_ARCHIVED_READONLY);
         }
+    }
+
+    private void ensureCanArchive(Long projectId) {
+        long unfinishedRequired = checklistItemMapper.selectCount(new LambdaQueryWrapper<ProjectChecklistItemEntity>()
+                .eq(ProjectChecklistItemEntity::getProjectId, projectId)
+                .eq(ProjectChecklistItemEntity::getDeleted, false)
+                .eq(ProjectChecklistItemEntity::getRequired, true)
+                .ne(ProjectChecklistItemEntity::getStatus, ChecklistItemStatusEnum.COMPLETE.getCode()));
+        if (unfinishedRequired > 0) {
+            throw new BusinessException(ErrorCode.PROJECT_ARCHIVE_CHECKLIST_INCOMPLETE);
+        }
+    }
+
+    private void archiveChecklist(Long projectId) {
+        ProjectChecklistItemEntity update = new ProjectChecklistItemEntity();
+        update.setStatus(ChecklistItemStatusEnum.ARCHIVED.getCode());
+        update.setUpdatedAt(OffsetDateTime.now());
+        checklistItemMapper.update(update, new LambdaQueryWrapper<ProjectChecklistItemEntity>()
+                .eq(ProjectChecklistItemEntity::getProjectId, projectId)
+                .eq(ProjectChecklistItemEntity::getDeleted, false));
     }
 
     private UserContext.UserInfo requireUser() {
@@ -298,6 +338,14 @@ public class ProjectServiceImpl implements ProjectService {
         for (Long userId : distinct) {
             notificationService.send(userId, "PROJECT_MEMBER", "你已加入投标项目", "项目：" + projectName, "PROJECT", projectId);
         }
+    }
+
+    private void notifyProjectMembers(Long projectId, String projectName, String type, String title) {
+        projectMemberMapper.selectList(new LambdaQueryWrapper<ProjectMemberEntity>()
+                .eq(ProjectMemberEntity::getProjectId, projectId)
+                .eq(ProjectMemberEntity::getDeleted, false))
+                .forEach(member -> notificationService.send(member.getUserId(), type, title,
+                        "项目：" + projectName, "PROJECT", projectId));
     }
 
     private void recordAudit(Long projectId, String operation, Map<String, Object> afterData) {

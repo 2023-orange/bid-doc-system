@@ -46,6 +46,33 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
         checkManage(projectId);
     }
 
+    @Override
+    public void checkChecklistMaintain(Long projectId, Long checklistOwnerUserId) {
+        UserContext.UserInfo user = requireUser();
+        if (user.isSuperAdmin()
+                || isProjectOwner(projectId, user.getUserId())
+                || isProjectMaterialOwner(projectId, user.getUserId())
+                || Objects.equals(user.getUserId(), checklistOwnerUserId)) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.PROJECT_PERMISSION_DENIED);
+    }
+
+    @Override
+    public boolean isProjectOwner(Long projectId, Long userId) {
+        return isMember(projectId, userId, ProjectMemberRoleEnum.OWNER.getCode());
+    }
+
+    @Override
+    public boolean isProjectMaterialOwner(Long projectId, Long userId) {
+        return isMember(projectId, userId, ProjectMemberRoleEnum.MATERIAL_OWNER.getCode());
+    }
+
+    @Override
+    public boolean isProjectMember(Long projectId, Long userId) {
+        return isMember(projectId, userId, null);
+    }
+
     private boolean isMember(Long projectId, Long userId, String role) {
         LambdaQueryWrapper<ProjectMemberEntity> wrapper = new LambdaQueryWrapper<ProjectMemberEntity>()
                 .eq(ProjectMemberEntity::getProjectId, projectId)
