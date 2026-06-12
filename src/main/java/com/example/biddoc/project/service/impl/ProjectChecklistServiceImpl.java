@@ -2,10 +2,15 @@ package com.example.biddoc.project.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.example.biddoc.audit.constant.AuditModuleCodeEnum;
+import com.example.biddoc.audit.constant.AuditOperationTypeEnum;
+import com.example.biddoc.audit.dto.AuditRecordCommand;
+import com.example.biddoc.audit.service.AuditService;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.notify.service.NotificationService;
 import com.example.biddoc.project.constant.ChecklistItemStatusEnum;
 import com.example.biddoc.project.constant.ProjectStatusEnum;
 import com.example.biddoc.project.entity.ChecklistTemplateEntity;
@@ -25,7 +30,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +45,8 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
     private final ProjectMapper projectMapper;
     private final DocumentMapper documentMapper;
     private final ProjectPermissionService projectPermissionService;
+    private final AuditService auditService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -98,6 +107,19 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         update.setDeadline(deadline);
         update.setUpdatedAt(OffsetDateTime.now());
         checklistItemMapper.updateById(update);
+        Map<String, Object> afterData = new HashMap<>();
+        afterData.put("ownerUserId", ownerUserId);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.PROJECT.getCode())
+                .bizType("CHECKLIST_ITEM")
+                .bizId(itemId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(afterData)
+                .build());
+        if (ownerUserId != null) {
+            notificationService.send(ownerUserId, "CHECKLIST_OWNER", "你被指定为清单项责任人",
+                    "清单项：" + item.getItemName(), "CHECKLIST_ITEM", itemId);
+        }
     }
 
     @Override
@@ -130,6 +152,14 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         checklistDocumentMapper.insert(binding);
 
         recalculateItemStatus(itemId);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.PROJECT.getCode())
+                .bizType("CHECKLIST_ITEM")
+                .bizId(itemId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("bindDocumentId", documentId, "versionNo", binding.getVersionNo()))
+                .build());
+        notifyChecklistOwner(item, "CHECKLIST_DOCUMENT_BIND", "清单项已绑定资料");
     }
 
     @Override
@@ -148,6 +178,14 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
                 .eq(ProjectChecklistDocumentEntity::getDocumentId, documentId)
                 .eq(ProjectChecklistDocumentEntity::getDeleted, false));
         recalculateItemStatus(itemId);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.PROJECT.getCode())
+                .bizType("CHECKLIST_ITEM")
+                .bizId(itemId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("unbindDocumentId", documentId))
+                .build());
+        notifyChecklistOwner(item, "CHECKLIST_DOCUMENT_UNBIND", "清单项已解绑资料");
     }
 
     @Override
@@ -216,6 +254,13 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         return Boolean.TRUE.equals(document.getHasExpireDate())
                 && document.getExpireDate() != null
                 && document.getExpireDate().isBefore(OffsetDateTime.now());
+    }
+
+    private void notifyChecklistOwner(ProjectChecklistItemEntity item, String type, String title) {
+        if (item.getOwnerUserId() != null) {
+            notificationService.send(item.getOwnerUserId(), type, title,
+                    "清单项：" + item.getItemName(), "CHECKLIST_ITEM", item.getId());
+        }
     }
 
     private ProjectChecklistItemEntity requireItem(Long itemId) {

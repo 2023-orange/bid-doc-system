@@ -18,6 +18,7 @@ import com.example.biddoc.folder.entity.FolderEntity;
 import com.example.biddoc.folder.mapper.FolderMapper;
 import com.example.biddoc.folder.service.FolderPermissionService;
 import com.example.biddoc.notify.service.NotificationService;
+import com.example.biddoc.project.constant.ChecklistItemStatusEnum;
 import com.example.biddoc.project.constant.ProjectMemberRoleEnum;
 import com.example.biddoc.project.entity.ProjectChecklistItemEntity;
 import com.example.biddoc.project.entity.ProjectMemberEntity;
@@ -204,6 +205,9 @@ public class ApprovalServiceImpl implements ApprovalService {
         if (item == null || Boolean.TRUE.equals(item.getDeleted()) || !projectId.equals(item.getProjectId())) {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不存在");
         }
+        if (ChecklistItemStatusEnum.ARCHIVED.getCode().equals(item.getStatus())) {
+            throw new BusinessException(ErrorCode.PROJECT_ARCHIVED_READONLY);
+        }
         projectPermissionService.checkManageOrOwner(projectId, item.getOwnerUserId());
 
         Long approverUserId = resolveProjectOwner(projectId);
@@ -281,6 +285,13 @@ public class ApprovalServiceImpl implements ApprovalService {
                         .eq(ApprovalInstanceEntity::getDeleted, false)
                         .orderByDesc(ApprovalInstanceEntity::getSubmittedAt)
         );
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType("DOCUMENT")
+                .bizId(documentId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("queryApprovalHistory", true))
+                .build());
         return instances.stream().flatMap(instance -> approvalTaskMapper.selectList(
                 Wrappers.<ApprovalTaskEntity>lambdaQuery()
                         .eq(ApprovalTaskEntity::getInstanceId, instance.getId())
@@ -290,7 +301,35 @@ public class ApprovalServiceImpl implements ApprovalService {
 
     @Override
     public List<ApprovalHistoryRespDTO> projectHistory(Long projectId) {
-        return List.of();
+        projectPermissionService.checkView(projectId);
+        List<Long> itemIds = projectChecklistItemMapper.selectList(Wrappers.<ProjectChecklistItemEntity>lambdaQuery()
+                        .eq(ProjectChecklistItemEntity::getProjectId, projectId)
+                        .eq(ProjectChecklistItemEntity::getDeleted, false))
+                .stream()
+                .map(ProjectChecklistItemEntity::getId)
+                .toList();
+        if (itemIds.isEmpty()) {
+            return List.of();
+        }
+        List<ApprovalInstanceEntity> instances = approvalInstanceMapper.selectList(
+                Wrappers.<ApprovalInstanceEntity>lambdaQuery()
+                        .eq(ApprovalInstanceEntity::getBizType, "CHECKLIST_ITEM")
+                        .in(ApprovalInstanceEntity::getBizId, itemIds)
+                        .eq(ApprovalInstanceEntity::getDeleted, false)
+                        .orderByDesc(ApprovalInstanceEntity::getSubmittedAt)
+        );
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.PROJECT.getCode())
+                .bizType("PROJECT")
+                .bizId(projectId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("queryApprovalHistory", true))
+                .build());
+        return instances.stream().flatMap(instance -> approvalTaskMapper.selectList(
+                Wrappers.<ApprovalTaskEntity>lambdaQuery()
+                        .eq(ApprovalTaskEntity::getInstanceId, instance.getId())
+                        .eq(ApprovalTaskEntity::getDeleted, false)
+        ).stream().map(task -> toHistoryRespDTO(instance, task))).toList();
     }
 
     private void handle(Long taskId, String comment, String finalStatus) {
@@ -331,9 +370,10 @@ public class ApprovalServiceImpl implements ApprovalService {
             documentService.markApprovalResult(instance.getDocumentId(), STATUS_APPROVED.equals(finalStatus), comment);
         }
 
+        boolean checklistApproval = "CHECKLIST_ITEM".equals(instance.getBizType());
         auditService.record(AuditRecordCommand.builder()
-                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
-                .bizType("DOCUMENT")
+                .moduleCode(checklistApproval ? AuditModuleCodeEnum.PROJECT.getCode() : AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType(instance.getBizType() != null ? instance.getBizType() : "DOCUMENT")
                 .bizId(instance.getDocumentId() != null ? instance.getDocumentId() : instance.getBizId())
                 .operationType(STATUS_APPROVED.equals(finalStatus)
                         ? AuditOperationTypeEnum.APPROVAL_APPROVE.getCode()

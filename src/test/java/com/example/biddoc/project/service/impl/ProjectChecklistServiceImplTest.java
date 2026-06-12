@@ -1,8 +1,10 @@
 package com.example.biddoc.project.service.impl;
 
 import com.example.biddoc.common.constant.UserContext;
+import com.example.biddoc.audit.service.AuditService;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.notify.service.NotificationService;
 import com.example.biddoc.project.entity.ChecklistTemplateEntity;
 import com.example.biddoc.project.entity.ChecklistTemplateItemEntity;
 import com.example.biddoc.project.entity.ProjectChecklistDocumentEntity;
@@ -36,6 +38,8 @@ class ProjectChecklistServiceImplTest {
     private final ProjectMapper projectMapper = mock(ProjectMapper.class);
     private final DocumentMapper documentMapper = mock(DocumentMapper.class);
     private final ProjectPermissionService projectPermissionService = mock(ProjectPermissionService.class);
+    private final AuditService auditService = mock(AuditService.class);
+    private final NotificationService notificationService = mock(NotificationService.class);
     private final ProjectChecklistServiceImpl service = new ProjectChecklistServiceImpl(
             templateMapper,
             templateItemMapper,
@@ -43,7 +47,9 @@ class ProjectChecklistServiceImplTest {
             checklistDocumentMapper,
             projectMapper,
             documentMapper,
-            projectPermissionService
+            projectPermissionService,
+            auditService,
+            notificationService
     );
 
     @AfterEach
@@ -110,7 +116,7 @@ class ProjectChecklistServiceImplTest {
         when(documentMapper.selectById(200L)).thenReturn(document);
         when(checklistDocumentMapper.selectCount(any())).thenReturn(1L);
         when(checklistDocumentMapper.selectList(any())).thenReturn(List.of(binding));
-        doNothing().when(projectPermissionService).checkManageOrOwner(100L, null);
+        doNothing().when(projectPermissionService).checkChecklistMaintain(100L, null);
 
         service.bindDocument(100L, 30L, 200L, 1);
 
