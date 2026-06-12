@@ -21,6 +21,7 @@ Run SQL files in this order for a fresh local database:
 11. `src/main/resources/db/migration/V105__project_checklist_init.sql`
 12. `src/main/resources/db/migration/V106__document_lifecycle_init.sql`
 13. `src/main/resources/db/migration/V107__workflow_business_writeback.sql`
+14. `src/main/resources/db/migration/V108__mainline_enhancement.sql`
 
 ## V103-V107 Dependency Notes
 
@@ -29,8 +30,9 @@ Run SQL files in this order for a fresh local database:
 - `V105__project_checklist_init.sql` creates checklist template and project checklist tables. It depends on project semantics from `V104`, but does not alter `V104` tables.
 - `V106__document_lifecycle_init.sql` alters `doc_document`, so it must run after `V100__document_init.sql`.
 - `V107__workflow_business_writeback.sql` alters `wf_approval_instance` and `wf_approval_task`, so it must run after `V103`.
+- `V108__mainline_enhancement.sql` adds document-version approval fields, approval instance `version_no`, and supporting indexes for checklist status, version approval, approval history, and document expiry queries. It must run after `V100`, `V103`, `V105`, `V106`, and `V107`.
 
-For the current dev strategy, apply `V103` before `V107`. If a local database already has `V104-V106` but missed `V103`, run `V103` first and then rerun `V107`.
+For the current dev strategy, apply `V103` before `V107`, then apply `V108`. If a local database already has `V104-V107`, run only `V108`.
 
 Project number generation requires the owning department to have `extension_data.abbr`, for example:
 

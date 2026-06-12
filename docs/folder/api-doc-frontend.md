@@ -2499,3 +2499,50 @@ const fetchData = async (page: number, size: number) => {
 - dev 环境仍不自动启用 Flyway，新增 SQL 需本地手动执行。
 - 审批仍是 MVP，不包含完整 BPM、条件分支、加签、移交、撤回。
 - 模板项编辑和删除接口后续继续补齐；当前已支持模板创建、更新、删除、查询和新增模板项。
+
+## 23. 一期主线收口增强：归档 / 版本审批 / 有效期 / 敏感等级
+
+### 23.1 项目归档和只读
+
+- 归档仍复用 `PATCH /api/v1/projects/{id}/status`，请求体传 `{ "projectStatus": "ARCHIVED" }`。
+- 归档前后端会校验必需清单项必须已完成；未完成返回 `4005004`。
+- 项目归档后，普通用户不能修改项目基础信息、阶段、成员、清单、责任人、资料绑定，也不能提交清单项审批。
+- `SUPER_ADMIN` 可查看和管理全部项目；项目 owner 可管理未归档项目；material owner 可维护自己负责的清单项；member 只能查看参与项目；outsider 不可查看。
+
+### 23.2 文档普通审批和版本审批
+
+- 普通文档审批：`POST /api/v1/documents/{id}/approval/submit`，审批结果回写 `doc_document.document_status`。
+- 版本审批：`POST /api/v1/documents/{id}/versions/{versionNo}/approval/submit`。
+- 上传新版本后，新版本默认 `approvalStatus=PENDING`，不会立即切换 `currentVersionNo`。
+- 版本审批通过后才切换 `currentVersionNo`；驳回后当前版本保持不变。
+- 版本列表返回新增字段：`approvalStatus`、`approvedAt`、`rejectedReason`。
+
+### 23.3 有效期和可绑定资料
+
+- `GET /api/v1/documents/bindable` 默认只返回 `APPROVED` 且未过期的资料。
+- 绑定已过期资料到项目清单会返回 `4002107`。
+- 清单状态重算会综合资料删除、作废、审批状态和有效期；过期资料不能让清单项进入 `COMPLETE`。
+
+### 23.4 敏感等级 MVP
+
+- `PUBLIC` / `INTERNAL`：沿用现有文件夹查看权限。
+- `SENSITIVE`：允许预览，普通用户禁止下载。
+- `SECRET`：仅 `SUPER_ADMIN`、文档所有者、文件夹 manager 可预览或下载。
+- 拒绝访问返回 `4032102`，并写入审计；审计不包含 storage key 或真实文件路径。
+
+### 23.5 审批历史
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/documents/{id}/approval/history` | 查询文档普通审批和版本审批历史 |
+| `GET` | `/api/v1/projects/{projectId}/approval/history` | 查询项目清单项相关审批历史 |
+
+审批历史响应新增字段：`versionNo`、`bizType`。
+
+### 23.6 新增错误码
+
+| code | 语义 |
+| --- | --- |
+| `4002107` | 资料已过期，不能绑定或作为有效资料使用 |
+| `4032102` | 敏感资料访问受限 |
+| `4005004` | 必需清单项未完成，不能归档 |

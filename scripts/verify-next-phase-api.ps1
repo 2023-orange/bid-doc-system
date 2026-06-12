@@ -107,6 +107,28 @@ function Invoke-UploadDocument {
     }
 }
 
+function Invoke-UploadDocumentVersion {
+    param(
+        [string]$CurrentDocumentId,
+        [hashtable]$Headers,
+        [string]$Name,
+        [string]$Content
+    )
+    $tempFile = Join-Path ([System.IO.Path]::GetTempPath()) "$Name.txt"
+    Set-Content -LiteralPath $tempFile -Value $Content -Encoding UTF8
+    try {
+        return Invoke-RestMethod -Method "POST" `
+            -Uri "$BaseUrl/api/v1/documents/$CurrentDocumentId/versions" `
+            -Headers $Headers `
+            -Form @{
+                file = Get-Item -LiteralPath $tempFile
+                changeLog = "end-to-end smoke new version"
+            }
+    } finally {
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-PendingTaskId {
     param(
         [hashtable]$Headers,
@@ -154,6 +176,18 @@ function Assert-ChecklistStatus {
     )
     $item = Get-ChecklistItem -Headers $Headers -CurrentProjectId $CurrentProjectId -ItemName $ItemName
     Assert-True -Condition ($item.status -eq $ExpectedStatus) -Name "checklist item $ItemName status $ExpectedStatus" -Message "actual=$($item.status)"
+}
+
+function Assert-DocumentCurrentVersion {
+    param(
+        [hashtable]$Headers,
+        [string]$CurrentDocumentId,
+        [int]$ExpectedVersion,
+        [string]$Name
+    )
+    $resp = Invoke-Json -Method "GET" -Url "$BaseUrl/api/v1/documents/$CurrentDocumentId" -Headers $Headers
+    Assert-Code -Resp $resp -Code 0 -Name "$Name detail"
+    Assert-True -Condition ($resp.data.currentVersionNo -eq $ExpectedVersion) -Name $Name -Message "actual=$($resp.data.currentVersionNo)"
 }
 
 function Assert-ProjectVisibleInList {
@@ -306,7 +340,7 @@ function Invoke-EndToEndSmoke {
         $itemResp = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/checklist-templates/$currentTemplateId/items" -Headers $AdminHeaders -Body @{
             itemName = $itemName
             description = "端到端验收清单项"
-            required = $true
+            required = ($itemName -eq $approvedItemName)
             businessCategory = "BID"
             tenderStructureCategory = "BUSINESS"
             suggestedSensitiveLevel = "INTERNAL"
@@ -323,6 +357,11 @@ function Invoke-EndToEndSmoke {
     Assert-Code -Resp $generateResp -Code 0 -Name "e2e generate project checklist"
     Assert-ChecklistStatus -Headers $OwnerHeaders -CurrentProjectId $currentProjectId -ItemName $approvedItemName -ExpectedStatus "PENDING_COLLECT"
     Assert-ChecklistStatus -Headers $OwnerHeaders -CurrentProjectId $currentProjectId -ItemName $rejectedItemName -ExpectedStatus "PENDING_COLLECT"
+
+    $archiveBlockedResp = Invoke-Json -Method "PATCH" -Url "$BaseUrl/api/v1/projects/$currentProjectId/status" -Headers $OwnerHeaders -Body @{
+        projectStatus = "ARCHIVED"
+    }
+    Assert-Code -Resp $archiveBlockedResp -Code 4005004 -Name "e2e archive blocked by unfinished required checklist"
 
     $approvedUpload = Invoke-UploadDocument -UploadFolderId $uploadFolderId -Headers $AdminHeaders -Name "$safePrefix-approved-$suffix" -Content "approved document smoke $suffix"
     Assert-Code -Resp $approvedUpload -Code 0 -Name "e2e upload approved-path document"
@@ -354,6 +393,36 @@ function Invoke-EndToEndSmoke {
     }
     Assert-Code -Resp $approveResp -Code 0 -Name "e2e approve document"
     Assert-DocumentStatusBySearch -Headers $AdminHeaders -Name $approvedDocName -Status "APPROVED"
+
+    Assert-DocumentCurrentVersion -Headers $AdminHeaders -CurrentDocumentId $approvedDocumentId -ExpectedVersion 1 -Name "e2e v1 remains current before new version"
+    $version2Upload = Invoke-UploadDocumentVersion -CurrentDocumentId $approvedDocumentId -Headers $AdminHeaders -Name "$safePrefix-v2-$suffix" -Content "approved v2 smoke $suffix"
+    Assert-Code -Resp $version2Upload -Code 0 -Name "e2e upload v2"
+    Assert-DocumentCurrentVersion -Headers $AdminHeaders -CurrentDocumentId $approvedDocumentId -ExpectedVersion 1 -Name "e2e v2 pending keeps v1 current"
+    $version2Submit = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/documents/$approvedDocumentId/versions/2/approval/submit" -Headers $AdminHeaders -Body @{
+        comment = "提交版本审批"
+    }
+    Assert-Code -Resp $version2Submit -Code 0 -Name "e2e submit v2 approval"
+    $createdApprovalInstanceIds += "$($version2Submit.data.instanceId)"
+    $version2TaskId = Get-PendingTaskId -Headers $AdminHeaders -InstanceId $version2Submit.data.instanceId
+    $version2Approve = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/approvals/$version2TaskId/approve" -Headers $AdminHeaders -Body @{
+        comment = "版本通过"
+    }
+    Assert-Code -Resp $version2Approve -Code 0 -Name "e2e approve v2"
+    Assert-DocumentCurrentVersion -Headers $AdminHeaders -CurrentDocumentId $approvedDocumentId -ExpectedVersion 2 -Name "e2e v2 approved becomes current"
+
+    $version3Upload = Invoke-UploadDocumentVersion -CurrentDocumentId $approvedDocumentId -Headers $AdminHeaders -Name "$safePrefix-v3-$suffix" -Content "rejected v3 smoke $suffix"
+    Assert-Code -Resp $version3Upload -Code 0 -Name "e2e upload v3"
+    $version3Submit = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/documents/$approvedDocumentId/versions/3/approval/submit" -Headers $AdminHeaders -Body @{
+        comment = "提交版本审批"
+    }
+    Assert-Code -Resp $version3Submit -Code 0 -Name "e2e submit v3 approval"
+    $createdApprovalInstanceIds += "$($version3Submit.data.instanceId)"
+    $version3TaskId = Get-PendingTaskId -Headers $AdminHeaders -InstanceId $version3Submit.data.instanceId
+    $version3Reject = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/approvals/$version3TaskId/reject" -Headers $AdminHeaders -Body @{
+        comment = "版本驳回"
+    }
+    Assert-Code -Resp $version3Reject -Code 0 -Name "e2e reject v3"
+    Assert-DocumentCurrentVersion -Headers $AdminHeaders -CurrentDocumentId $approvedDocumentId -ExpectedVersion 2 -Name "e2e v3 rejected keeps v2 current"
 
     $approvedItem = Get-ChecklistItem -Headers $OwnerHeaders -CurrentProjectId $currentProjectId -ItemName $approvedItemName
     $bindApproved = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/projects/$currentProjectId/checklist/items/$($approvedItem.id)/documents" -Headers $OwnerHeaders -Body @{
@@ -424,6 +493,31 @@ function Invoke-EndToEndSmoke {
     }
     Assert-Code -Resp $rejectedChecklistReject -Code 0 -Name "e2e reject checklist item"
     Assert-ChecklistStatus -Headers $OwnerHeaders -CurrentProjectId $currentProjectId -ItemName $rejectedItemName -ExpectedStatus "NEED_SUPPLEMENT"
+
+    $documentHistoryResp = Invoke-Json -Method "GET" -Url "$BaseUrl/api/v1/documents/$approvedDocumentId/approval/history" -Headers $AdminHeaders
+    Assert-Code -Resp $documentHistoryResp -Code 0 -Name "e2e document approval history"
+    $versionHistory = @($documentHistoryResp.data | Where-Object { $_.bizType -eq "DOCUMENT_VERSION" })
+    Assert-True -Condition ($versionHistory.Count -gt 0) -Name "e2e version approval history returned"
+
+    $projectHistoryResp = Invoke-Json -Method "GET" -Url "$BaseUrl/api/v1/projects/$currentProjectId/approval/history" -Headers $OwnerHeaders
+    Assert-Code -Resp $projectHistoryResp -Code 0 -Name "e2e project approval history"
+
+    $archiveResp = Invoke-Json -Method "PATCH" -Url "$BaseUrl/api/v1/projects/$currentProjectId/status" -Headers $OwnerHeaders -Body @{
+        projectStatus = "ARCHIVED"
+    }
+    Assert-Code -Resp $archiveResp -Code 0 -Name "e2e archive project after required checklist complete"
+
+    $archivedMemberResp = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/projects/$currentProjectId/members" -Headers $OwnerHeaders -Body @{
+        userIds = @([long]$OutsiderUserId)
+        memberRole = "MEMBER"
+    }
+    Assert-Code -Resp $archivedMemberResp -Code 4005003 -Name "e2e archived project rejects member change"
+
+    $archivedBindResp = Invoke-Json -Method "POST" -Url "$BaseUrl/api/v1/projects/$currentProjectId/checklist/items/$($approvedItem.id)/documents" -Headers $OwnerHeaders -Body @{
+        documentId = [long]$approvedDocumentId
+        versionNo = 2
+    }
+    Assert-Code -Resp $archivedBindResp -Code 4005003 -Name "e2e archived project rejects checklist binding"
     } finally {
         if ($currentProjectId) {
             $cleanupTemplateId = if ($currentTemplateId) { "$currentTemplateId" } else { "0" }
