@@ -54,6 +54,24 @@ public class DocumentSearchReqDTO {
     @Schema(description = "标签 ID 列表")
     private List<Long> tagIds;
 
+    @Schema(description = "资料编号")
+    private String documentNo;
+
+    @Schema(description = "资料状态")
+    private String documentStatus;
+
+    @Schema(description = "资料业务分类")
+    private String businessCategory;
+
+    @Schema(description = "敏感等级")
+    private String sensitiveLevel;
+
+    @Schema(description = "归属部门 ID")
+    private Long ownerDeptId;
+
+    @Schema(description = "仅查询已过期资料")
+    private Boolean expiredOnly = false;
+
     /**
      * 排序字段
      * 可选值: name, size, createdAt, updatedAt

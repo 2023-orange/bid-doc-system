@@ -71,6 +71,13 @@ public enum ErrorCode {
     APPROVAL_TASK_NOT_PENDING(4004001, "审批任务不是待处理状态"),
     APPROVAL_APPROVER_INVALID(4034001, "无权处理该审批任务"),
 
+    // Project
+    PROJECT_OWNER_REQUIRED(4005001, "项目至少需要一个负责人"),
+    PROJECT_DEPT_ABBR_REQUIRED(4005002, "项目所属部门未配置事业部缩写"),
+    PROJECT_ARCHIVED_READONLY(4005003, "已归档项目不允许修改"),
+    PROJECT_NOT_FOUND(4045001, "项目不存在"),
+    PROJECT_PERMISSION_DENIED(4035001, "无项目操作权限"),
+
     // Audit
     AUDIT_RECORD_FAILED(5003001, "审计记录失败"),
     AUDIT_QUERY_FAILED(5003002, "审计查询失败"),

@@ -18,11 +18,16 @@ public class ApprovalInstanceEntity {
     private Long id;
 
     private Long documentId;
+    private String bizModule;
+    private String bizType;
+    private Long bizId;
+    private String scenario;
     private Long submitterUserId;
     private String status;
     private String submitComment;
     private OffsetDateTime submittedAt;
     private OffsetDateTime completedAt;
+    private OffsetDateTime finishedAt;
 
     @TableLogic
     private Boolean deleted;

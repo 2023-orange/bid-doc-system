@@ -1,6 +1,7 @@
 package com.example.biddoc.document.service;
 
 import com.example.biddoc.common.result.PageResponse;
+import com.example.biddoc.document.dto.req.DocumentMetadataUpdateReqDTO;
 import com.example.biddoc.document.dto.req.DocumentSearchReqDTO;
 import com.example.biddoc.document.dto.resp.DocumentDetailRespDTO;
 import com.example.biddoc.document.dto.resp.DocumentListItemRespDTO;
@@ -41,6 +42,18 @@ public interface DocumentService {
      * @return 文档详情
      */
     DocumentDetailRespDTO getDocumentDetail(Long documentId);
+
+    void updateMetadata(Long documentId, DocumentMetadataUpdateReqDTO req);
+
+    void markApproving(Long documentId);
+
+    void markApprovalResult(Long documentId, boolean approved, String reason);
+
+    void voidDocument(Long documentId, String reason);
+
+    void restoreDocument(Long documentId);
+
+    PageResponse<DocumentListItemRespDTO> listBindableDocuments(DocumentSearchReqDTO searchReq);
 
     /**
      * 获取文件夹下的文档列表（分页）

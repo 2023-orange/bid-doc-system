@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 @Data
-@TableName("sys_department")
+@TableName(value = "sys_department", autoResultMap = true)
 public class SysDepartment {
 
     @TableId(type = IdType.ASSIGN_ID)

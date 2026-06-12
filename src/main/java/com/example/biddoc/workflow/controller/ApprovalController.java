@@ -32,6 +32,20 @@ public class ApprovalController {
         return ApiResponse.success(Map.of("instanceId", instanceId));
     }
 
+    @PostMapping("/documents/{id}/versions/{versionNo}/approval/submit")
+    public ApiResponse<Map<String, Long>> submitVersion(@PathVariable Long id, @PathVariable Integer versionNo,
+                                                        @RequestBody(required = false) ApprovalSubmitReqDTO req) {
+        Long instanceId = approvalService.submitVersion(id, versionNo, req != null ? req.getComment() : null);
+        return ApiResponse.success(Map.of("instanceId", instanceId));
+    }
+
+    @PostMapping("/projects/{projectId}/checklist/items/{itemId}/approval/submit")
+    public ApiResponse<Map<String, Long>> submitChecklistItem(@PathVariable Long projectId, @PathVariable Long itemId,
+                                                              @RequestBody(required = false) ApprovalSubmitReqDTO req) {
+        Long instanceId = approvalService.submitChecklistItem(projectId, itemId, req != null ? req.getComment() : null);
+        return ApiResponse.success(Map.of("instanceId", instanceId));
+    }
+
     @GetMapping("/approvals/tasks")
     public ApiResponse<List<ApprovalTaskRespDTO>> listMyTasks(
             @RequestParam(value = "status", required = false) String status) {
@@ -55,5 +69,10 @@ public class ApprovalController {
     @GetMapping("/documents/{id}/approval/history")
     public ApiResponse<List<ApprovalHistoryRespDTO>> history(@PathVariable Long id) {
         return ApiResponse.success(approvalService.history(id));
+    }
+
+    @GetMapping("/projects/{projectId}/approval/history")
+    public ApiResponse<List<ApprovalHistoryRespDTO>> projectHistory(@PathVariable Long projectId) {
+        return ApiResponse.success(approvalService.projectHistory(projectId));
     }
 }

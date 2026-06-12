@@ -8,7 +8,8 @@ import lombok.Getter;
 public enum AuditModuleCodeEnum {
 
     FOLDER("FOLDER", "文件夹模块"),
-    DOCUMENT("DOCUMENT", "文档模块");
+    DOCUMENT("DOCUMENT", "文档模块"),
+    PROJECT("PROJECT", "投标项目模块");
 
     private final String code;
     private final String name;

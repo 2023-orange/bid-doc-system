@@ -9,6 +9,10 @@ public interface ApprovalService {
 
     Long submit(Long documentId, String comment);
 
+    Long submitVersion(Long documentId, Integer versionNo, String comment);
+
+    Long submitChecklistItem(Long projectId, Long itemId, String comment);
+
     List<ApprovalTaskRespDTO> listMyTasks(String status);
 
     void approve(Long taskId, String comment);
@@ -16,4 +20,6 @@ public interface ApprovalService {
     void reject(Long taskId, String comment);
 
     List<ApprovalHistoryRespDTO> history(Long documentId);
+
+    List<ApprovalHistoryRespDTO> projectHistory(Long projectId);
 }

@@ -65,6 +65,22 @@ public class DocumentEntity {
     private Integer status;
 
     /**
+     * 资料业务状态：上传后先进入待补全，后续审批回写正式状态。
+     */
+    private String documentStatus;
+
+    private String documentNo;
+    private String businessCategory;
+    private String tenderStructureCategory;
+    private String sensitiveLevel;
+    private String sourceType;
+    private OffsetDateTime effectiveDate;
+    private OffsetDateTime expireDate;
+    private Boolean hasExpireDate;
+    private Boolean metadataCompleted;
+    private String invalidReason;
+
+    /**
      * 备注
      */
     private String remark;

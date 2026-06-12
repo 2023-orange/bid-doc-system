@@ -13,6 +13,7 @@ import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.common.result.PageResponse;
 import com.example.biddoc.common.util.AssertUtil;
+import com.example.biddoc.document.dto.req.DocumentMetadataUpdateReqDTO;
 import com.example.biddoc.document.dto.req.DocumentSearchReqDTO;
 import com.example.biddoc.document.dto.resp.DocumentDetailRespDTO;
 import com.example.biddoc.document.dto.resp.DocumentListItemRespDTO;
@@ -140,6 +141,10 @@ public class DocumentServiceImpl implements DocumentService {
             document.setOwnerUserId(currentUser.getUserId());
             document.setOwnerDeptId(currentUser.getDeptId());
             document.setStatus(1);
+            document.setDocumentNo("DOC-" + documentId);
+            document.setDocumentStatus("INCOMPLETE");
+            document.setMetadataCompleted(Boolean.FALSE);
+            document.setHasExpireDate(Boolean.FALSE);
             document.setRemark(remark);
             documentMapper.insert(document);
 
@@ -218,6 +223,78 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         return resp;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateMetadata(Long documentId, DocumentMetadataUpdateReqDTO req) {
+        DocumentEntity document = requireDocumentForLifecycle(documentId);
+        FolderEntity folder = folderMapper.selectById(document.getFolderId());
+        AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
+        folderPermissionService.checkView(folder);
+        if (Boolean.TRUE.equals(req.getHasExpireDate()) && req.getExpireDate() == null) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "有有效期资料必须填写失效日期");
+        }
+
+        DocumentEntity update = new DocumentEntity();
+        update.setId(documentId);
+        update.setName(StringUtils.hasText(req.getDocumentName()) ? req.getDocumentName() : document.getName());
+        update.setBusinessCategory(req.getBusinessCategory());
+        update.setTenderStructureCategory(req.getTenderStructureCategory());
+        update.setSensitiveLevel(req.getSensitiveLevel());
+        update.setOwnerDeptId(req.getOwnerDeptId());
+        update.setSourceType(req.getSourceType());
+        update.setHasExpireDate(Boolean.TRUE.equals(req.getHasExpireDate()));
+        update.setEffectiveDate(req.getEffectiveDate());
+        update.setExpireDate(req.getExpireDate());
+        update.setRemark(req.getRemark());
+        update.setMetadataCompleted(Boolean.TRUE);
+        update.setDocumentStatus("READY_SUBMIT");
+        if (!StringUtils.hasText(document.getDocumentNo())) {
+            update.setDocumentNo("DOC-" + documentId);
+        }
+        // 元数据变更不生成文件版本，只更新主表并通过审计保留业务变更痕迹。
+        documentMapper.updateById(update);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType("DOCUMENT")
+                .bizId(documentId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("documentStatus", "READY_SUBMIT"))
+                .build());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markApproving(Long documentId) {
+        updateDocumentStatus(documentId, "APPROVING", null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markApprovalResult(Long documentId, boolean approved, String reason) {
+        updateDocumentStatus(documentId, approved ? "APPROVED" : "REJECTED", reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void voidDocument(Long documentId, String reason) {
+        updateDocumentStatus(documentId, "VOIDED", reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restoreDocument(Long documentId) {
+        updateDocumentStatus(documentId, "READY_SUBMIT", null);
+    }
+
+    @Override
+    public PageResponse<DocumentListItemRespDTO> listBindableDocuments(DocumentSearchReqDTO searchReq) {
+        if (searchReq == null) {
+            searchReq = new DocumentSearchReqDTO();
+        }
+        searchReq.setDocumentStatus("APPROVED");
+        return searchDocuments(searchReq);
     }
 
     @Override
@@ -951,6 +1028,25 @@ public class DocumentServiceImpl implements DocumentService {
         if (StringUtils.hasText(searchReq.getMimeType())) {
             wrapper.eq(DocumentEntity::getLatestMime, searchReq.getMimeType());
         }
+        if (StringUtils.hasText(searchReq.getDocumentNo())) {
+            wrapper.eq(DocumentEntity::getDocumentNo, searchReq.getDocumentNo());
+        }
+        if (StringUtils.hasText(searchReq.getDocumentStatus())) {
+            wrapper.eq(DocumentEntity::getDocumentStatus, searchReq.getDocumentStatus());
+        }
+        if (StringUtils.hasText(searchReq.getBusinessCategory())) {
+            wrapper.eq(DocumentEntity::getBusinessCategory, searchReq.getBusinessCategory());
+        }
+        if (StringUtils.hasText(searchReq.getSensitiveLevel())) {
+            wrapper.eq(DocumentEntity::getSensitiveLevel, searchReq.getSensitiveLevel());
+        }
+        if (searchReq.getOwnerDeptId() != null) {
+            wrapper.eq(DocumentEntity::getOwnerDeptId, searchReq.getOwnerDeptId());
+        }
+        if (Boolean.TRUE.equals(searchReq.getExpiredOnly())) {
+            wrapper.eq(DocumentEntity::getHasExpireDate, true)
+                    .lt(DocumentEntity::getExpireDate, java.time.OffsetDateTime.now());
+        }
         if (searchReq.getOwnerUserId() != null) {
             wrapper.eq(DocumentEntity::getOwnerUserId, searchReq.getOwnerUserId());
         }
@@ -1296,6 +1392,34 @@ public class DocumentServiceImpl implements DocumentService {
             })
             .filter(dto -> dto != null)
             .collect(Collectors.toList());
+    }
+
+    private DocumentEntity requireDocumentForLifecycle(Long documentId) {
+        DocumentEntity document = documentMapper.selectById(documentId);
+        if (document == null || Boolean.TRUE.equals(document.getDeleted())) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+        return document;
+    }
+
+    private void updateDocumentStatus(Long documentId, String status, String reason) {
+        DocumentEntity document = requireDocumentForLifecycle(documentId);
+        FolderEntity folder = folderMapper.selectById(document.getFolderId());
+        AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
+        folderPermissionService.checkView(folder);
+
+        DocumentEntity update = new DocumentEntity();
+        update.setId(documentId);
+        update.setDocumentStatus(status);
+        update.setInvalidReason(reason);
+        documentMapper.updateById(update);
+        auditService.record(AuditRecordCommand.builder()
+                .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                .bizType("DOCUMENT")
+                .bizId(documentId)
+                .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .afterData(Map.of("documentStatus", status))
+                .build());
     }
 
     /**

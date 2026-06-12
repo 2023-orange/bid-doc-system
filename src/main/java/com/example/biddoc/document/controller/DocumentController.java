@@ -2,6 +2,7 @@ package com.example.biddoc.document.controller;
 
 import com.example.biddoc.common.result.ApiResponse;
 import com.example.biddoc.common.result.PageResponse;
+import com.example.biddoc.document.dto.req.DocumentMetadataUpdateReqDTO;
 import com.example.biddoc.document.dto.resp.DocumentDetailRespDTO;
 import com.example.biddoc.document.dto.resp.DocumentListItemRespDTO;
 import com.example.biddoc.document.dto.resp.DocumentUploadRespDTO;
@@ -58,6 +59,36 @@ public class DocumentController {
     public ApiResponse<DocumentDetailRespDTO> getDocumentDetail(@PathVariable Long id) {
         DocumentDetailRespDTO result = documentService.getDocumentDetail(id);
         return ApiResponse.success(result);
+    }
+
+    @PutMapping("/documents/{id}/metadata")
+    @Operation(summary = "补全或更新资料元数据", description = "更新资料业务元数据，不生成文件版本")
+    public ApiResponse<Void> updateMetadata(@PathVariable Long id,
+                                            @RequestBody DocumentMetadataUpdateReqDTO req) {
+        documentService.updateMetadata(id, req);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/documents/{id}/submit-approval")
+    @Operation(summary = "提交资料审批", description = "将资料状态置为审批中，具体审批实例由 workflow 接口处理")
+    public ApiResponse<Void> submitApproval(@PathVariable Long id) {
+        documentService.markApproving(id);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/documents/{id}/void")
+    @Operation(summary = "作废资料", description = "将资料标记为已作废")
+    public ApiResponse<Void> voidDocument(@PathVariable Long id,
+                                          @RequestParam(value = "reason", required = false) String reason) {
+        documentService.voidDocument(id, reason);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/documents/{id}/restore")
+    @Operation(summary = "恢复资料", description = "将资料恢复到待提交状态")
+    public ApiResponse<Void> restoreDocument(@PathVariable Long id) {
+        documentService.restoreDocument(id);
+        return ApiResponse.success();
     }
 
     /**
@@ -227,6 +258,12 @@ public class DocumentController {
             @RequestParam(value = "recursive", required = false, defaultValue = "true") Boolean recursive,
             @RequestParam(value = "mimeType", required = false) String mimeType,
             @RequestParam(value = "ownerUserId", required = false) Long ownerUserId,
+            @RequestParam(value = "documentNo", required = false) String documentNo,
+            @RequestParam(value = "documentStatus", required = false) String documentStatus,
+            @RequestParam(value = "businessCategory", required = false) String businessCategory,
+            @RequestParam(value = "sensitiveLevel", required = false) String sensitiveLevel,
+            @RequestParam(value = "ownerDeptId", required = false) Long ownerDeptId,
+            @RequestParam(value = "expiredOnly", required = false, defaultValue = "false") Boolean expiredOnly,
             @RequestParam(value = "createdFrom", required = false) java.time.OffsetDateTime createdFrom,
             @RequestParam(value = "createdTo", required = false) java.time.OffsetDateTime createdTo,
             @RequestParam(value = "favoriteFolderOnly", required = false, defaultValue = "false") Boolean favoriteFolderOnly,
@@ -243,6 +280,12 @@ public class DocumentController {
         searchReq.setRecursive(recursive);
         searchReq.setMimeType(mimeType);
         searchReq.setOwnerUserId(ownerUserId);
+        searchReq.setDocumentNo(documentNo);
+        searchReq.setDocumentStatus(documentStatus);
+        searchReq.setBusinessCategory(businessCategory);
+        searchReq.setSensitiveLevel(sensitiveLevel);
+        searchReq.setOwnerDeptId(ownerDeptId);
+        searchReq.setExpiredOnly(expiredOnly);
         searchReq.setCreatedFrom(createdFrom);
         searchReq.setCreatedTo(createdTo);
         searchReq.setFavoriteFolderOnly(favoriteFolderOnly);
@@ -254,6 +297,20 @@ public class DocumentController {
 
         PageResponse<DocumentListItemRespDTO> result = documentService.searchDocuments(searchReq);
         return ApiResponse.success(result);
+    }
+
+    @GetMapping("/documents/bindable")
+    @Operation(summary = "查询可绑定资料", description = "查询已审批通过且当前用户可见的资料")
+    public ApiResponse<PageResponse<DocumentListItemRespDTO>> listBindableDocuments(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
+            @RequestParam(value = "size", required = false, defaultValue = "20") Integer size) {
+        com.example.biddoc.document.dto.req.DocumentSearchReqDTO searchReq =
+                new com.example.biddoc.document.dto.req.DocumentSearchReqDTO();
+        searchReq.setKeyword(keyword);
+        searchReq.setPage(page);
+        searchReq.setSize(size);
+        return ApiResponse.success(documentService.listBindableDocuments(searchReq));
     }
 
     /**

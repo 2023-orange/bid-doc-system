@@ -11,10 +11,18 @@ import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.document.service.DocumentService;
 import com.example.biddoc.folder.entity.FolderEntity;
 import com.example.biddoc.folder.mapper.FolderMapper;
 import com.example.biddoc.folder.service.FolderPermissionService;
 import com.example.biddoc.notify.service.NotificationService;
+import com.example.biddoc.project.constant.ProjectMemberRoleEnum;
+import com.example.biddoc.project.entity.ProjectChecklistItemEntity;
+import com.example.biddoc.project.entity.ProjectMemberEntity;
+import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
+import com.example.biddoc.project.mapper.ProjectMemberMapper;
+import com.example.biddoc.project.service.ProjectChecklistService;
+import com.example.biddoc.project.service.ProjectPermissionService;
 import com.example.biddoc.workflow.dto.resp.ApprovalHistoryRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalTaskRespDTO;
 import com.example.biddoc.workflow.entity.ApprovalInstanceEntity;
@@ -48,6 +56,11 @@ public class ApprovalServiceImpl implements ApprovalService {
     private final FolderPermissionService folderPermissionService;
     private final AuditService auditService;
     private final NotificationService notificationService;
+    private final DocumentService documentService;
+    private final ProjectChecklistService projectChecklistService;
+    private final ProjectChecklistItemMapper projectChecklistItemMapper;
+    private final ProjectMemberMapper projectMemberMapper;
+    private final ProjectPermissionService projectPermissionService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -71,6 +84,10 @@ public class ApprovalServiceImpl implements ApprovalService {
         ApprovalInstanceEntity instance = new ApprovalInstanceEntity();
         instance.setId(instanceId);
         instance.setDocumentId(documentId);
+        instance.setBizModule("DOCUMENT");
+        instance.setBizType("DOCUMENT");
+        instance.setBizId(documentId);
+        instance.setScenario("DOCUMENT_APPROVAL");
         instance.setSubmitterUserId(user.getUserId());
         instance.setStatus(STATUS_PENDING);
         instance.setSubmitComment(comment);
@@ -86,6 +103,9 @@ public class ApprovalServiceImpl implements ApprovalService {
         task.setStatus(STATUS_PENDING);
         task.setDeleted(Boolean.FALSE);
         approvalTaskMapper.insert(task);
+
+        // 审批实例创建后立即回写资料状态，保证资料列表与审批待办口径一致。
+        documentService.markApproving(documentId);
 
         Map<String, Object> afterData = new HashMap<>();
         afterData.put("instanceId", String.valueOf(instanceId));
@@ -107,6 +127,53 @@ public class ApprovalServiceImpl implements ApprovalService {
                 "DOCUMENT",
                 documentId
         );
+        return instanceId;
+    }
+
+    @Override
+    public Long submitVersion(Long documentId, Integer versionNo, String comment) {
+        return submit(documentId, comment);
+    }
+
+    @Override
+    public Long submitChecklistItem(Long projectId, Long itemId, String comment) {
+        UserContext.UserInfo user = requireCurrentUser();
+        ProjectChecklistItemEntity item = projectChecklistItemMapper.selectById(itemId);
+        if (item == null || Boolean.TRUE.equals(item.getDeleted()) || !projectId.equals(item.getProjectId())) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不存在");
+        }
+        projectPermissionService.checkManageOrOwner(projectId, item.getOwnerUserId());
+
+        Long approverUserId = resolveProjectOwner(projectId);
+        Long instanceId = IdWorker.getId();
+        Long taskId = IdWorker.getId();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ApprovalInstanceEntity instance = new ApprovalInstanceEntity();
+        instance.setId(instanceId);
+        instance.setDocumentId(null);
+        instance.setBizModule("PROJECT");
+        instance.setBizType("CHECKLIST_ITEM");
+        instance.setBizId(itemId);
+        instance.setScenario("CHECKLIST_ITEM_APPROVAL");
+        instance.setSubmitterUserId(user.getUserId());
+        instance.setStatus(STATUS_PENDING);
+        instance.setSubmitComment(comment);
+        instance.setSubmittedAt(now);
+        instance.setDeleted(Boolean.FALSE);
+        approvalInstanceMapper.insert(instance);
+
+        ApprovalTaskEntity task = new ApprovalTaskEntity();
+        task.setId(taskId);
+        task.setInstanceId(instanceId);
+        task.setDocumentId(null);
+        task.setApproverUserId(approverUserId);
+        task.setStatus(STATUS_PENDING);
+        task.setDeleted(Boolean.FALSE);
+        approvalTaskMapper.insert(task);
+
+        notificationService.send(approverUserId, "WORKFLOW_TASK", "新的清单项审批任务",
+                "请审批清单项：" + item.getItemName(), "CHECKLIST_ITEM", itemId);
         return instanceId;
     }
 
@@ -159,6 +226,11 @@ public class ApprovalServiceImpl implements ApprovalService {
         ).stream().map(task -> toHistoryRespDTO(instance, task))).toList();
     }
 
+    @Override
+    public List<ApprovalHistoryRespDTO> projectHistory(Long projectId) {
+        return List.of();
+    }
+
     private void handle(Long taskId, String comment, String finalStatus) {
         UserContext.UserInfo user = requireCurrentUser();
         ApprovalTaskEntity task = approvalTaskMapper.selectById(taskId);
@@ -184,12 +256,20 @@ public class ApprovalServiceImpl implements ApprovalService {
 
         instance.setStatus(finalStatus);
         instance.setCompletedAt(now);
+        instance.setFinishedAt(now);
         approvalInstanceMapper.updateById(instance);
+
+        // 审批完成必须回写业务对象；按 bizType 分发，避免把流程结果和业务状态割裂。
+        if ("CHECKLIST_ITEM".equals(instance.getBizType())) {
+            projectChecklistService.recalculateItemStatus(instance.getBizId());
+        } else {
+            documentService.markApprovalResult(instance.getDocumentId(), STATUS_APPROVED.equals(finalStatus), comment);
+        }
 
         auditService.record(AuditRecordCommand.builder()
                 .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
                 .bizType("DOCUMENT")
-                .bizId(instance.getDocumentId())
+                .bizId(instance.getDocumentId() != null ? instance.getDocumentId() : instance.getBizId())
                 .operationType(STATUS_APPROVED.equals(finalStatus)
                         ? AuditOperationTypeEnum.APPROVAL_APPROVE.getCode()
                         : AuditOperationTypeEnum.APPROVAL_REJECT.getCode())
@@ -199,11 +279,23 @@ public class ApprovalServiceImpl implements ApprovalService {
         notificationService.send(
                 instance.getSubmitterUserId(),
                 "WORKFLOW_RESULT",
-                "文档审批结果",
-                STATUS_APPROVED.equals(finalStatus) ? "你的文档审批已通过" : "你的文档审批已驳回",
-                "DOCUMENT",
-                instance.getDocumentId()
+                "审批结果",
+                STATUS_APPROVED.equals(finalStatus) ? "你的审批已通过" : "你的审批已驳回",
+                instance.getBizType() != null ? instance.getBizType() : "DOCUMENT",
+                instance.getBizId() != null ? instance.getBizId() : instance.getDocumentId()
         );
+    }
+
+    private Long resolveProjectOwner(Long projectId) {
+        ProjectMemberEntity owner = projectMemberMapper.selectOne(Wrappers.<ProjectMemberEntity>lambdaQuery()
+                .eq(ProjectMemberEntity::getProjectId, projectId)
+                .eq(ProjectMemberEntity::getMemberRole, ProjectMemberRoleEnum.OWNER.getCode())
+                .eq(ProjectMemberEntity::getDeleted, false)
+                .last("limit 1"));
+        if (owner == null) {
+            throw new BusinessException(ErrorCode.APPROVAL_APPROVER_INVALID, "项目未配置负责人");
+        }
+        return owner.getUserId();
     }
 
     private Long resolveApprover(FolderEntity folder, Long submitterUserId) {

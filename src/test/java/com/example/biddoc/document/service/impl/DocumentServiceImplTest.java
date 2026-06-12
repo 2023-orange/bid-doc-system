@@ -7,6 +7,7 @@ import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.document.dto.req.DocumentSearchReqDTO;
+import com.example.biddoc.document.dto.req.DocumentMetadataUpdateReqDTO;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.entity.DocumentVersionEntity;
 import com.example.biddoc.document.entity.DownloadLogEntity;
@@ -207,6 +208,60 @@ class DocumentServiceImplTest {
                 () -> service.previewDocument(1000L, "127.0.0.1", "JUnit"));
 
         assertEquals(ErrorCode.DOCUMENT_PREVIEW_UNSUPPORTED, ex.getErrorCode());
+    }
+
+    @Test
+    void updateMetadataMarksDocumentReadyToSubmit() {
+        UserContext.set(new UserContext.UserInfo(7L, "employee", List.of("EMPLOYEE"), 100L));
+
+        DocumentEntity document = new DocumentEntity();
+        document.setId(1000L);
+        document.setFolderId(10L);
+        document.setDocumentStatus("INCOMPLETE");
+
+        FolderEntity folder = folder(10L, "10");
+        when(documentMapper.selectById(1000L)).thenReturn(document);
+        when(folderMapper.selectById(10L)).thenReturn(folder);
+        doNothing().when(folderPermissionService).checkView(folder);
+
+        DocumentMetadataUpdateReqDTO req = new DocumentMetadataUpdateReqDTO();
+        req.setDocumentName("营业执照");
+        req.setBusinessCategory("LICENSE");
+        req.setSensitiveLevel("INTERNAL");
+        req.setOwnerDeptId(100L);
+        req.setSourceType("DEPARTMENT");
+        req.setHasExpireDate(false);
+
+        service.updateMetadata(1000L, req);
+
+        verify(documentMapper).updateById(argThat(updated ->
+                Long.valueOf(1000L).equals(updated.getId())
+                        && "营业执照".equals(updated.getName())
+                        && "READY_SUBMIT".equals(updated.getDocumentStatus())
+                        && Boolean.TRUE.equals(updated.getMetadataCompleted())
+        ));
+    }
+
+    @Test
+    void submitApprovalMarksDocumentApproving() {
+        UserContext.set(new UserContext.UserInfo(7L, "employee", List.of("EMPLOYEE"), 100L));
+
+        DocumentEntity document = new DocumentEntity();
+        document.setId(1000L);
+        document.setFolderId(10L);
+        document.setDocumentStatus("READY_SUBMIT");
+
+        FolderEntity folder = folder(10L, "10");
+        when(documentMapper.selectById(1000L)).thenReturn(document);
+        when(folderMapper.selectById(10L)).thenReturn(folder);
+        doNothing().when(folderPermissionService).checkView(folder);
+
+        service.markApproving(1000L);
+
+        verify(documentMapper).updateById(argThat(updated ->
+                Long.valueOf(1000L).equals(updated.getId())
+                        && "APPROVING".equals(updated.getDocumentStatus())
+        ));
     }
 
     private static FolderEntity folder(Long id, String ancestorIds) {

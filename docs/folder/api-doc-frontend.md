@@ -2388,3 +2388,114 @@ const fetchData = async (page: number, size: number) => {
 
 **文档维护**: 本文档由后端团队维护，如有疑问请联系后端开发人员。
 **在线文档**: 启动项目后访问 `http://localhost:8080/doc.html` 查看 Knife4j 在线文档。
+
+---
+
+## 22. 一期主线新增接口：项目 / 清单 / 资料生命周期
+
+### 22.1 投标项目
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/projects` | 创建投标项目，系统生成项目编号 |
+| `PUT` | `/api/v1/projects/{id}` | 编辑项目基础信息 |
+| `GET` | `/api/v1/projects/{id}` | 查询项目详情 |
+| `GET` | `/api/v1/projects` | 分页查询项目列表，后端按当前用户过滤权限 |
+| `POST` | `/api/v1/projects/{id}/members` | 添加项目成员 |
+| `DELETE` | `/api/v1/projects/{id}/members/{userId}` | 移除项目成员 |
+| `PATCH` | `/api/v1/projects/{id}/stage` | 修改项目阶段 |
+| `PATCH` | `/api/v1/projects/{id}/status` | 修改项目状态 |
+
+创建项目请求示例：
+
+```json
+{
+  "projectName": "国网投标项目",
+  "tenderUnit": "国网",
+  "ownerDeptId": 10,
+  "projectType": "POWER",
+  "bidDeadline": "2026-07-01T10:00:00+08:00",
+  "ownerUserIds": [2],
+  "materialOwnerUserIds": [3],
+  "memberUserIds": [4],
+  "folderId": 100
+}
+```
+
+项目编号格式为 `事业部缩写-YYYYMMDD-流水号`。当前实现从 `sys_department.extension_data.abbr` 读取事业部缩写。
+
+### 22.2 项目资料清单
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/projects/{projectId}/checklist/generate?templateId={templateId}` | 根据模板生成项目清单副本 |
+| `GET` | `/api/v1/projects/{projectId}/checklist` | 查询项目清单 |
+| `PATCH` | `/api/v1/projects/{projectId}/checklist/items/{itemId}/owner` | 设置清单项责任人与截止时间 |
+| `POST` | `/api/v1/projects/{projectId}/checklist/items/{itemId}/documents` | 绑定文档到清单项 |
+| `DELETE` | `/api/v1/projects/{projectId}/checklist/items/{itemId}/documents/{documentId}` | 解绑清单项文档 |
+
+清单模板：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/checklist-templates` | 创建清单模板 |
+| `PUT` | `/api/v1/checklist-templates/{id}` | 更新清单模板 |
+| `GET` | `/api/v1/checklist-templates/{id}` | 查询清单模板 |
+| `GET` | `/api/v1/checklist-templates` | 分页查询清单模板 |
+| `DELETE` | `/api/v1/checklist-templates/{id}` | 删除清单模板 |
+| `POST` | `/api/v1/checklist-templates/{id}/items` | 新增模板项 |
+
+绑定文档请求示例：
+
+```json
+{
+  "documentId": 200,
+  "versionNo": 1
+}
+```
+
+清单项状态包括：
+
+- `PENDING_COLLECT`：待收集
+- `PENDING_REVIEW`：待审核
+- `NEED_SUPPLEMENT`：需补充
+- `COMPLETE`：已收齐
+- `ARCHIVED`：已归档
+
+### 22.3 资料生命周期
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `PUT` | `/api/v1/documents/{id}/metadata` | 补全或更新资料元数据，不生成文件版本 |
+| `POST` | `/api/v1/documents/{id}/submit-approval` | 将资料置为审批中 |
+
+元数据请求示例：
+
+```json
+{
+  "documentName": "营业执照",
+  "businessCategory": "LICENSE",
+  "tenderStructureCategory": "QUALIFICATION",
+  "sensitiveLevel": "INTERNAL",
+  "ownerDeptId": 10,
+  "sourceType": "DEPARTMENT",
+  "hasExpireDate": false,
+  "remark": "正式资料"
+}
+```
+
+资料状态包括：
+
+- `INCOMPLETE`：待补全
+- `READY_SUBMIT`：待提交
+- `APPROVING`：审批中
+- `APPROVED`：已通过
+- `REJECTED`：已驳回
+- `VOIDED`：已作废
+- `DELETED`：已删除
+
+### 22.4 当前限制
+
+- dev 环境仍不自动启用 Flyway，新增 SQL 需本地手动执行。
+- 审批仍是 MVP，不包含完整 BPM、条件分支、加签、移交、撤回。
+- 模板项编辑和删除接口后续继续补齐；当前已支持模板创建、更新、删除、查询和新增模板项。

@@ -4,10 +4,15 @@ import com.example.biddoc.audit.service.AuditService;
 import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.document.service.DocumentService;
 import com.example.biddoc.folder.entity.FolderEntity;
 import com.example.biddoc.folder.mapper.FolderMapper;
 import com.example.biddoc.folder.service.FolderPermissionService;
 import com.example.biddoc.notify.service.NotificationService;
+import com.example.biddoc.project.service.ProjectChecklistService;
+import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
+import com.example.biddoc.project.mapper.ProjectMemberMapper;
+import com.example.biddoc.project.service.ProjectPermissionService;
 import com.example.biddoc.workflow.entity.ApprovalInstanceEntity;
 import com.example.biddoc.workflow.entity.ApprovalTaskEntity;
 import com.example.biddoc.workflow.mapper.ApprovalInstanceMapper;
@@ -34,6 +39,11 @@ class ApprovalServiceImplTest {
     private final FolderPermissionService folderPermissionService = mock(FolderPermissionService.class);
     private final AuditService auditService = mock(AuditService.class);
     private final NotificationService notificationService = mock(NotificationService.class);
+    private final DocumentService documentService = mock(DocumentService.class);
+    private final ProjectChecklistService projectChecklistService = mock(ProjectChecklistService.class);
+    private final ProjectChecklistItemMapper projectChecklistItemMapper = mock(ProjectChecklistItemMapper.class);
+    private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
+    private final ProjectPermissionService projectPermissionService = mock(ProjectPermissionService.class);
     private final ApprovalServiceImpl service = new ApprovalServiceImpl(
             approvalInstanceMapper,
             approvalTaskMapper,
@@ -41,7 +51,12 @@ class ApprovalServiceImplTest {
             folderMapper,
             folderPermissionService,
             auditService,
-            notificationService
+            notificationService,
+            documentService,
+            projectChecklistService,
+            projectChecklistItemMapper,
+            projectMemberMapper,
+            projectPermissionService
     );
 
     @AfterEach
@@ -102,5 +117,6 @@ class ApprovalServiceImplTest {
         assertEquals("APPROVED", instance.getStatus());
         verify(approvalTaskMapper).updateById(task);
         verify(approvalInstanceMapper).updateById(instance);
+        verify(documentService).markApprovalResult(100L, true, "同意");
     }
 }
