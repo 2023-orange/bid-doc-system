@@ -53,6 +53,7 @@ public enum ErrorCode {
     DOCUMENT_ROOT_FOLDER_FORBIDDEN(4002105, "根级文件夹不允许直接上传文档"),
     DOCUMENT_PREVIEW_UNSUPPORTED(4002106, "当前文件类型不支持预览"),
     DOCUMENT_EXPIRED(4002107, "资料已过期，不能绑定或作为有效资料使用"),
+    DOCUMENT_SENSITIVE_ACCESS_DENIED(4032102, "敏感资料访问受限"),
 
     DOCUMENT_NOT_FOUND(4042101, "文档不存在"),
     DOCUMENT_VERSION_NOT_FOUND(4042102, "文档版本不存在"),

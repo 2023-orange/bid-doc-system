@@ -204,6 +204,7 @@ public class DocumentServiceImpl implements DocumentService {
         FolderEntity folder = folderMapper.selectById(document.getFolderId());
         AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
         folderPermissionService.checkView(folder);
+        enforceSensitiveAccess(document, folder, true, documentId, document.getCurrentVersionNo());
 
         // 3. 查询当前版本
         DocumentVersionEntity currentVersion = documentVersionMapper.selectOne(
@@ -610,6 +611,7 @@ public class DocumentServiceImpl implements DocumentService {
         FolderEntity folder = folderMapper.selectById(document.getFolderId());
         AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
         folderPermissionService.checkView(folder);
+        enforceSensitiveAccess(document, folder, true, documentId, versionNo);
 
         // 3. 查询指定版本
         DocumentVersionEntity version = documentVersionMapper.selectOne(
@@ -653,6 +655,7 @@ public class DocumentServiceImpl implements DocumentService {
         FolderEntity folder = folderMapper.selectById(document.getFolderId());
         AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
         folderPermissionService.checkView(folder);
+        enforceSensitiveAccess(document, folder, false, documentId, versionNo);
 
         DocumentVersionEntity version = documentVersionMapper.selectOne(
             new LambdaQueryWrapper<DocumentVersionEntity>()
@@ -887,6 +890,31 @@ public class DocumentServiceImpl implements DocumentService {
             );
         } catch (Exception e) {
             log.warn("预览审计失败: documentId={}, versionNo={}", documentId, versionNo, e);
+        }
+    }
+
+    private void enforceSensitiveAccess(DocumentEntity document, FolderEntity folder, boolean download,
+                                        Long documentId, Integer versionNo) {
+        String level = document.getSensitiveLevel();
+        if (!StringUtils.hasText(level) || "PUBLIC".equalsIgnoreCase(level) || "INTERNAL".equalsIgnoreCase(level)) {
+            return;
+        }
+        UserContext.UserInfo currentUser = UserContext.get();
+        boolean privileged = currentUser != null
+                && (currentUser.isSuperAdmin()
+                || Objects.equals(document.getOwnerUserId(), currentUser.getUserId())
+                || folderPermissionService.isManagerOfFolder(folder, currentUser.getUserId()));
+        boolean denied = "SECRET".equalsIgnoreCase(level) ? !privileged
+                : ("SENSITIVE".equalsIgnoreCase(level) && download && !privileged);
+        if (denied) {
+            auditService.record(AuditRecordCommand.builder()
+                    .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
+                    .bizType("DOCUMENT")
+                    .bizId(documentId)
+                    .operationType(download ? AuditOperationTypeEnum.DOWNLOAD.getCode() : AuditOperationTypeEnum.PREVIEW.getCode())
+                    .afterData(Map.of("versionNo", versionNo, "denied", true, "sensitiveLevel", level))
+                    .build());
+            throw new BusinessException(ErrorCode.DOCUMENT_SENSITIVE_ACCESS_DENIED);
         }
     }
 
