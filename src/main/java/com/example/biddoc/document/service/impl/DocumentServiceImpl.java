@@ -218,7 +218,15 @@ public class DocumentServiceImpl implements DocumentService {
         resp.setId(String.valueOf(document.getId()));
         resp.setFolderId(String.valueOf(document.getFolderId()));
         resp.setName(document.getName());
+        resp.setDocumentNo(document.getDocumentNo());
+        resp.setDocumentStatus(document.getDocumentStatus());
+        resp.setBusinessCategory(document.getBusinessCategory());
+        resp.setSensitiveLevel(document.getSensitiveLevel());
+        resp.setHasExpireDate(document.getHasExpireDate());
+        resp.setExpireDate(document.getExpireDate());
+        resp.setMetadataCompleted(document.getMetadataCompleted());
         resp.setCurrentVersionNo(document.getCurrentVersionNo());
+        resp.setApprovalStatus(document.getDocumentStatus());
         resp.setOwnerUserId(String.valueOf(document.getOwnerUserId()));
         resp.setOwnerDeptId(document.getOwnerDeptId() != null ? String.valueOf(document.getOwnerDeptId()) : null);
         resp.setRemark(document.getRemark());
@@ -227,6 +235,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         if (currentVersion != null) {
             resp.setCurrentVersion(toVersionRespDTO(currentVersion));
+            resp.setVersionApprovalStatus(currentVersion.getApprovalStatus());
         }
 
         return resp;
@@ -952,6 +961,14 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentListItemRespDTO dto = new DocumentListItemRespDTO();
         dto.setId(String.valueOf(document.getId()));
         dto.setName(document.getName());
+        dto.setDocumentNo(document.getDocumentNo());
+        dto.setDocumentStatus(document.getDocumentStatus());
+        dto.setBusinessCategory(document.getBusinessCategory());
+        dto.setSensitiveLevel(document.getSensitiveLevel());
+        dto.setHasExpireDate(document.getHasExpireDate());
+        dto.setExpireDate(document.getExpireDate());
+        dto.setMetadataCompleted(document.getMetadataCompleted());
+        dto.setApprovalStatus(document.getDocumentStatus());
         dto.setCurrentVersionNo(document.getCurrentVersionNo());
         dto.setLatestSize(document.getLatestSize());
         dto.setLatestMime(document.getLatestMime());

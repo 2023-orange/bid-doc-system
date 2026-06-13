@@ -26,6 +26,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -262,6 +263,98 @@ class DocumentServiceImplTest {
                 Long.valueOf(1000L).equals(updated.getId())
                         && "APPROVING".equals(updated.getDocumentStatus())
         ));
+    }
+
+    @Test
+    void getDocumentDetailReturnsLifecycleFieldsForFrontendDisplay() {
+        UserContext.set(new UserContext.UserInfo(7L, "employee", List.of("EMPLOYEE"), 100L));
+
+        OffsetDateTime expireDate = OffsetDateTime.parse("2026-07-01T10:00:00+08:00");
+        DocumentEntity document = new DocumentEntity();
+        document.setId(1000L);
+        document.setFolderId(10L);
+        document.setName("技术方案");
+        document.setCurrentVersionNo(2);
+        document.setOwnerUserId(7L);
+        document.setOwnerDeptId(100L);
+        document.setDocumentNo("DOC-1000");
+        document.setDocumentStatus("APPROVED");
+        document.setBusinessCategory("TECHNICAL");
+        document.setSensitiveLevel("INTERNAL");
+        document.setHasExpireDate(true);
+        document.setExpireDate(expireDate);
+        document.setMetadataCompleted(true);
+
+        FolderEntity folder = folder(10L, "10");
+        DocumentVersionEntity version = new DocumentVersionEntity();
+        version.setDocumentId(1000L);
+        version.setVersionNo(2);
+        version.setApprovalStatus("APPROVED");
+
+        when(documentMapper.selectById(1000L)).thenReturn(document);
+        when(folderMapper.selectById(10L)).thenReturn(folder);
+        doNothing().when(folderPermissionService).checkView(folder);
+        when(documentVersionMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(version);
+
+        var detail = service.getDocumentDetail(1000L);
+
+        assertEquals("DOC-1000", detail.getDocumentNo());
+        assertEquals("APPROVED", detail.getDocumentStatus());
+        assertEquals("TECHNICAL", detail.getBusinessCategory());
+        assertEquals("INTERNAL", detail.getSensitiveLevel());
+        assertEquals(true, detail.getHasExpireDate());
+        assertEquals(expireDate, detail.getExpireDate());
+        assertEquals(true, detail.getMetadataCompleted());
+        assertEquals("APPROVED", detail.getApprovalStatus());
+        assertEquals("APPROVED", detail.getVersionApprovalStatus());
+    }
+
+    @Test
+    void searchDocumentsReturnsLifecycleFieldsInListItems() {
+        UserContext.set(new UserContext.UserInfo(7L, "employee", List.of("EMPLOYEE"), 100L));
+
+        OffsetDateTime expireDate = OffsetDateTime.parse("2026-07-01T10:00:00+08:00");
+        FolderEntity folder = folder(10L, "10");
+        when(folderMapper.selectById(10L)).thenReturn(folder);
+        doNothing().when(folderPermissionService).checkView(folder);
+        when(folderPermissionService.canView(folder)).thenReturn(true);
+
+        DocumentEntity document = new DocumentEntity();
+        document.setId(1000L);
+        document.setFolderId(10L);
+        document.setName("技术方案");
+        document.setCurrentVersionNo(2);
+        document.setLatestSize(128L);
+        document.setLatestMime("application/pdf");
+        document.setOwnerUserId(7L);
+        document.setDocumentNo("DOC-1000");
+        document.setDocumentStatus("APPROVED");
+        document.setBusinessCategory("TECHNICAL");
+        document.setSensitiveLevel("INTERNAL");
+        document.setHasExpireDate(true);
+        document.setExpireDate(expireDate);
+        document.setMetadataCompleted(true);
+
+        Page<DocumentEntity> page = new Page<>(1, 20);
+        page.setRecords(List.of(document));
+        page.setTotal(1);
+        when(documentMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
+
+        DocumentSearchReqDTO req = new DocumentSearchReqDTO();
+        req.setFolderId(10L);
+        req.setRecursive(false);
+
+        var item = service.searchDocuments(req).getList().get(0);
+
+        assertEquals("DOC-1000", item.getDocumentNo());
+        assertEquals("APPROVED", item.getDocumentStatus());
+        assertEquals("TECHNICAL", item.getBusinessCategory());
+        assertEquals("INTERNAL", item.getSensitiveLevel());
+        assertEquals(true, item.getHasExpireDate());
+        assertEquals(expireDate, item.getExpireDate());
+        assertEquals(true, item.getMetadataCompleted());
+        assertEquals("APPROVED", item.getApprovalStatus());
+        assertEquals(2, item.getCurrentVersionNo());
     }
 
     private static FolderEntity folder(Long id, String ancestorIds) {

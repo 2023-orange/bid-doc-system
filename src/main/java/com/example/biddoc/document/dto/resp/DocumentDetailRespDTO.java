@@ -30,9 +30,54 @@ public class DocumentDetailRespDTO {
     private String name;
 
     /**
+     * 资料编号
+     */
+    private String documentNo;
+
+    /**
+     * 资料生命周期状态
+     */
+    private String documentStatus;
+
+    /**
+     * 业务分类
+     */
+    private String businessCategory;
+
+    /**
+     * 敏感等级
+     */
+    private String sensitiveLevel;
+
+    /**
+     * 是否存在有效期
+     */
+    private Boolean hasExpireDate;
+
+    /**
+     * 失效时间
+     */
+    private OffsetDateTime expireDate;
+
+    /**
+     * 元数据是否已补全
+     */
+    private Boolean metadataCompleted;
+
+    /**
      * 当前版本号
      */
     private Integer currentVersionNo;
+
+    /**
+     * 当前资料审批状态，等同于 documentStatus，方便前端审批视图展示
+     */
+    private String approvalStatus;
+
+    /**
+     * 当前版本审批状态
+     */
+    private String versionApprovalStatus;
 
     /**
      * 当前版本详情
