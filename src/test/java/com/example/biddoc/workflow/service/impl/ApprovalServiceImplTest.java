@@ -1,6 +1,7 @@
 package com.example.biddoc.workflow.service.impl;
 
 import com.example.biddoc.audit.service.AuditService;
+import com.example.biddoc.auth.mapper.SysUserMapper;
 import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
@@ -13,11 +14,17 @@ import com.example.biddoc.notify.service.NotificationService;
 import com.example.biddoc.project.service.ProjectChecklistService;
 import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
 import com.example.biddoc.project.mapper.ProjectMemberMapper;
+import com.example.biddoc.project.mapper.ProjectMapper;
 import com.example.biddoc.project.service.ProjectPermissionService;
 import com.example.biddoc.workflow.entity.ApprovalInstanceEntity;
 import com.example.biddoc.workflow.entity.ApprovalTaskEntity;
+import com.example.biddoc.workflow.mapper.ApprovalActionLogMapper;
+import com.example.biddoc.workflow.mapper.ApprovalDefinitionMapper;
 import com.example.biddoc.workflow.mapper.ApprovalInstanceMapper;
+import com.example.biddoc.workflow.mapper.ApprovalNodeMapper;
+import com.example.biddoc.workflow.mapper.ApprovalTaskCandidateMapper;
 import com.example.biddoc.workflow.mapper.ApprovalTaskMapper;
+import com.example.biddoc.workflow.service.ApprovalFlowEngineService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +42,11 @@ class ApprovalServiceImplTest {
 
     private final ApprovalInstanceMapper approvalInstanceMapper = mock(ApprovalInstanceMapper.class);
     private final ApprovalTaskMapper approvalTaskMapper = mock(ApprovalTaskMapper.class);
+    private final ApprovalActionLogMapper approvalActionLogMapper = mock(ApprovalActionLogMapper.class);
+    private final ApprovalDefinitionMapper approvalDefinitionMapper = mock(ApprovalDefinitionMapper.class);
+    private final ApprovalNodeMapper approvalNodeMapper = mock(ApprovalNodeMapper.class);
+    private final ApprovalTaskCandidateMapper approvalTaskCandidateMapper = mock(ApprovalTaskCandidateMapper.class);
+    private final SysUserMapper sysUserMapper = mock(SysUserMapper.class);
     private final DocumentMapper documentMapper = mock(DocumentMapper.class);
     private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
     private final FolderMapper folderMapper = mock(FolderMapper.class);
@@ -45,10 +57,17 @@ class ApprovalServiceImplTest {
     private final ProjectChecklistService projectChecklistService = mock(ProjectChecklistService.class);
     private final ProjectChecklistItemMapper projectChecklistItemMapper = mock(ProjectChecklistItemMapper.class);
     private final ProjectMemberMapper projectMemberMapper = mock(ProjectMemberMapper.class);
+    private final ProjectMapper projectMapper = mock(ProjectMapper.class);
     private final ProjectPermissionService projectPermissionService = mock(ProjectPermissionService.class);
+    private final ApprovalFlowEngineService approvalFlowEngineService = mock(ApprovalFlowEngineService.class);
     private final ApprovalServiceImpl service = new ApprovalServiceImpl(
             approvalInstanceMapper,
             approvalTaskMapper,
+            approvalActionLogMapper,
+            approvalDefinitionMapper,
+            approvalNodeMapper,
+            approvalTaskCandidateMapper,
+            sysUserMapper,
             documentMapper,
             documentVersionMapper,
             folderMapper,
@@ -59,7 +78,9 @@ class ApprovalServiceImplTest {
             projectChecklistService,
             projectChecklistItemMapper,
             projectMemberMapper,
-            projectPermissionService
+            projectMapper,
+            projectPermissionService,
+            approvalFlowEngineService
     );
 
     @AfterEach
@@ -82,6 +103,7 @@ class ApprovalServiceImplTest {
 
         when(documentMapper.selectById(100L)).thenReturn(document);
         when(folderMapper.selectById(10L)).thenReturn(folder);
+        when(approvalFlowEngineService.matchDefinition(any(), any(), any(), any(), any())).thenReturn(null);
         doNothing().when(folderPermissionService).checkView(folder);
 
         service.submit(100L, "请审批");
@@ -110,9 +132,11 @@ class ApprovalServiceImplTest {
         instance.setDocumentId(100L);
         instance.setSubmitterUserId(7L);
         instance.setStatus("PENDING");
+        instance.setDefinitionId(null);
 
         when(approvalTaskMapper.selectById(20L)).thenReturn(task);
         when(approvalInstanceMapper.selectById(30L)).thenReturn(instance);
+        when(approvalFlowEngineService.createNextTask(any(), any(), any(), any(), any())).thenReturn(null);
 
         service.approve(20L, "同意");
 

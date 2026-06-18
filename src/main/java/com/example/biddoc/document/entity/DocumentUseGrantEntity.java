@@ -1,7 +1,6 @@
-package com.example.biddoc.workflow.entity;
+package com.example.biddoc.document.entity;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
@@ -10,32 +9,42 @@ import lombok.Data;
 
 import java.time.OffsetDateTime;
 
+/**
+ * 资料使用授权记录，固定到具体资料版本，避免授权后因版本切换产生权限漂移。
+ */
 @Data
-@TableName("wf_approval_instance")
-public class ApprovalInstanceEntity {
+@TableName("doc_document_use_grant")
+public class DocumentUseGrantEntity {
 
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId
     private Long id;
 
     private Long documentId;
-    private String bizModule;
-    private String bizType;
-    private Long bizId;
-    private Integer versionNo;
-    private String scenario;
-    private Long definitionId;
-    private Integer definitionVersion;
-    private Long currentNodeId;
-    private String currentNodeCode;
-    private Long submitterUserId;
-    private String status;
-    private String submitComment;
-    private OffsetDateTime submittedAt;
-    private OffsetDateTime completedAt;
-    private OffsetDateTime finishedAt;
 
-    @TableLogic
-    private Boolean deleted;
+    private Integer versionNo;
+
+    private Long projectId;
+
+    /**
+     * 记录申请人与被授权人，后续审批回写和权限判断都依赖这两个身份边界。
+     */
+    private Long applicantId;
+
+    private Long granteeId;
+
+    private Long approvalInstanceId;
+
+    private String grantType;
+
+    private String scenario;
+
+    private OffsetDateTime validFrom;
+
+    private OffsetDateTime validUntil;
+
+    private String status;
+
+    private String reason;
 
     @TableField(fill = FieldFill.INSERT)
     private OffsetDateTime createdAt;
@@ -48,4 +57,7 @@ public class ApprovalInstanceEntity {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private String updatedBy;
+
+    @TableLogic
+    private Boolean deleted;
 }

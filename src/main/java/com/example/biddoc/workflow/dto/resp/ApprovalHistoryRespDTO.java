@@ -10,6 +10,14 @@ public class ApprovalHistoryRespDTO {
     private Long instanceId;
     private Long documentId;
     private Integer versionNo;
+    private String definitionName;
+    private String nodeName;
+    private String actionType;
+    private String actionComment;
+    private OffsetDateTime actionTime;
+    private Long handlerUserId;
+    private String bizModule;
+    private Long bizId;
     private String bizType;
     private Long submitterUserId;
     private String instanceStatus;

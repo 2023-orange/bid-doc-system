@@ -49,9 +49,13 @@ public interface DocumentService {
 
     void markApprovalResult(Long documentId, boolean approved, String reason);
 
+    void markApprovalWithdrawn(Long documentId, String reason);
+
     void markVersionApproving(Long documentId, Integer versionNo);
 
     void markVersionApprovalResult(Long documentId, Integer versionNo, boolean approved, String reason);
+
+    void markVersionApprovalWithdrawn(Long documentId, Integer versionNo, String reason);
 
     void voidDocument(Long documentId, String reason);
 

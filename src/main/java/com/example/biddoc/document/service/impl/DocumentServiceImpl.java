@@ -294,6 +294,13 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void markApprovalWithdrawn(Long documentId, String reason) {
+        // 撤回不是驳回，业务对象需要回到可重新提交状态，避免后续清单口径误判为需补充。
+        updateDocumentStatus(documentId, "READY_SUBMIT", reason);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void markVersionApproving(Long documentId, Integer versionNo) {
         updateVersionApprovalStatus(documentId, versionNo, VERSION_PENDING, null, false);
     }
@@ -303,6 +310,13 @@ public class DocumentServiceImpl implements DocumentService {
     public void markVersionApprovalResult(Long documentId, Integer versionNo, boolean approved, String reason) {
         updateVersionApprovalStatus(documentId, versionNo,
                 approved ? VERSION_APPROVED : VERSION_REJECTED, reason, approved);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markVersionApprovalWithdrawn(Long documentId, Integer versionNo, String reason) {
+        // 版本审批撤回仅恢复待审批状态，不切换当前版本，防止未通过版本污染正式资料。
+        updateVersionApprovalStatus(documentId, versionNo, VERSION_PENDING, reason, false);
     }
 
     @Override

@@ -70,7 +70,10 @@ public enum ErrorCode {
     NOTIFICATION_NOT_FOUND(4043001, "通知不存在"),
     APPROVAL_TASK_NOT_FOUND(4044001, "审批任务不存在"),
     APPROVAL_INSTANCE_NOT_FOUND(4044002, "审批实例不存在"),
+    APPROVAL_DEFINITION_NOT_FOUND(4044003, "审批流程定义不存在"),
+    APPROVAL_NODE_NOT_FOUND(4044004, "审批节点不存在"),
     APPROVAL_TASK_NOT_PENDING(4004001, "审批任务不是待处理状态"),
+    APPROVAL_FLOW_INVALID(4004002, "审批流程配置不完整"),
     APPROVAL_APPROVER_INVALID(4034001, "无权处理该审批任务"),
 
     // Project

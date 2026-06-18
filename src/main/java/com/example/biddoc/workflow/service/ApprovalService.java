@@ -19,6 +19,14 @@ public interface ApprovalService {
 
     void reject(Long taskId, String comment);
 
+    void withdraw(Long instanceId, String comment);
+
+    void transfer(Long taskId, Long targetUserId, String comment);
+
+    void addSign(Long taskId, Long assigneeUserId, String comment);
+
+    void terminate(Long instanceId, String reason);
+
     List<ApprovalHistoryRespDTO> history(Long documentId);
 
     List<ApprovalHistoryRespDTO> projectHistory(Long projectId);

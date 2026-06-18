@@ -1,8 +1,13 @@
 package com.example.biddoc.workflow.controller;
 
 import com.example.biddoc.common.result.ApiResponse;
+import com.example.biddoc.common.exception.BusinessException;
+import com.example.biddoc.common.exception.ErrorCode;
+import com.example.biddoc.workflow.dto.req.ApprovalAddSignReqDTO;
 import com.example.biddoc.workflow.dto.req.ApprovalHandleReqDTO;
 import com.example.biddoc.workflow.dto.req.ApprovalSubmitReqDTO;
+import com.example.biddoc.workflow.dto.req.ApprovalTerminateReqDTO;
+import com.example.biddoc.workflow.dto.req.ApprovalTransferReqDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalHistoryRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalTaskRespDTO;
 import com.example.biddoc.workflow.service.ApprovalService;
@@ -63,6 +68,43 @@ public class ApprovalController {
     public ApiResponse<Void> reject(@PathVariable Long id,
                                     @RequestBody(required = false) ApprovalHandleReqDTO req) {
         approvalService.reject(id, req != null ? req.getComment() : null);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/approvals/{id}/withdraw")
+    public ApiResponse<Void> withdraw(@PathVariable Long id,
+                                      @RequestBody(required = false) ApprovalHandleReqDTO req) {
+        approvalService.withdraw(id, req != null ? req.getComment() : null);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/approvals/tasks/{taskId}/transfer")
+    public ApiResponse<Void> transfer(@PathVariable Long taskId,
+                                      @RequestBody(required = false) ApprovalTransferReqDTO req) {
+        if (req == null) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "转交参数不能为空");
+        }
+        approvalService.transfer(taskId, req.getTargetUserId(), req.getComment());
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/approvals/tasks/{taskId}/add-sign")
+    public ApiResponse<Void> addSign(@PathVariable Long taskId,
+                                     @RequestBody(required = false) ApprovalAddSignReqDTO req) {
+        if (req == null) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "加签参数不能为空");
+        }
+        approvalService.addSign(taskId, req.getAssigneeUserId(), req.getComment());
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/approvals/{id}/terminate")
+    public ApiResponse<Void> terminate(@PathVariable Long id,
+                                       @RequestBody(required = false) ApprovalTerminateReqDTO req) {
+        if (req == null) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "终止参数不能为空");
+        }
+        approvalService.terminate(id, req.getReason());
         return ApiResponse.success();
     }
 

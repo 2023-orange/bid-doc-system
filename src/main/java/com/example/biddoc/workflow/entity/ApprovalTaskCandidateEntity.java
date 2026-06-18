@@ -11,23 +11,21 @@ import lombok.Data;
 import java.time.OffsetDateTime;
 
 @Data
-@TableName("wf_approval_task")
-public class ApprovalTaskEntity {
+@TableName("wf_approval_task_candidate")
+public class ApprovalTaskCandidateEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    private Long taskId;
     private Long instanceId;
-    private Long documentId;
     private Long definitionId;
     private Long nodeId;
     private String nodeCode;
-    private Long approverUserId;
-    private String status;
-    private String comment;
-    private OffsetDateTime handledAt;
-    private Long transferredFromTaskId;
-    private Boolean addSign;
+    private String candidateType;
+    private String candidateValue;
+    private Long candidateUserId;
+    private Boolean resolved;
 
     @TableLogic
     private Boolean deleted;
