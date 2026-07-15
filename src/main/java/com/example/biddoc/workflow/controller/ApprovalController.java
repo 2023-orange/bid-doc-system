@@ -8,6 +8,7 @@ import com.example.biddoc.workflow.dto.req.ApprovalHandleReqDTO;
 import com.example.biddoc.workflow.dto.req.ApprovalSubmitReqDTO;
 import com.example.biddoc.workflow.dto.req.ApprovalTerminateReqDTO;
 import com.example.biddoc.workflow.dto.req.ApprovalTransferReqDTO;
+import com.example.biddoc.workflow.dto.resp.ApprovalHandleResultRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalHistoryRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalTaskRespDTO;
 import com.example.biddoc.workflow.service.ApprovalService;
@@ -58,17 +59,15 @@ public class ApprovalController {
     }
 
     @PostMapping("/approvals/{id}/approve")
-    public ApiResponse<Void> approve(@PathVariable Long id,
-                                     @RequestBody(required = false) ApprovalHandleReqDTO req) {
-        approvalService.approve(id, req != null ? req.getComment() : null);
-        return ApiResponse.success();
+    public ApiResponse<ApprovalHandleResultRespDTO> approve(@PathVariable Long id,
+                                                            @RequestBody(required = false) ApprovalHandleReqDTO req) {
+        return ApiResponse.success(approvalService.approve(id, req != null ? req.getComment() : null));
     }
 
     @PostMapping("/approvals/{id}/reject")
-    public ApiResponse<Void> reject(@PathVariable Long id,
-                                    @RequestBody(required = false) ApprovalHandleReqDTO req) {
-        approvalService.reject(id, req != null ? req.getComment() : null);
-        return ApiResponse.success();
+    public ApiResponse<ApprovalHandleResultRespDTO> reject(@PathVariable Long id,
+                                                           @RequestBody(required = false) ApprovalHandleReqDTO req) {
+        return ApiResponse.success(approvalService.reject(id, req != null ? req.getComment() : null));
     }
 
     @PostMapping("/approvals/{id}/withdraw")

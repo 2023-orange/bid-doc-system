@@ -60,6 +60,38 @@ class FolderFavoriteServiceImplTest {
                 "FOLDER".equals(command.getModuleCode())
                         && "FAVORITE".equals(command.getOperationType())
                         && Long.valueOf(10L).equals(command.getBizId())
+                        && "项目资料".equals(command.getObjectName())
+                        && "employee 收藏了文件夹《项目资料》".equals(command.getActionSummary())
+        ));
+    }
+
+    @Test
+    void unfavoriteFolderWritesBusinessTraceAuditWhenFavoriteExists() {
+        UserContext.set(new UserContext.UserInfo(7L, "employee", List.of("EMPLOYEE"), 100L));
+
+        FolderEntity folder = folder(10L, "项目资料");
+        FolderFavoriteEntity existing = new FolderFavoriteEntity();
+        existing.setId(99L);
+        existing.setFolderId(10L);
+        existing.setUserId(7L);
+        existing.setDeleted(false);
+
+        when(folderMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(folder);
+        doNothing().when(folderPermissionService).checkView(folder);
+        when(folderFavoriteMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
+
+        service.unfavorite(10L);
+
+        verify(folderFavoriteMapper).updateById(argThat(entity ->
+                Long.valueOf(99L).equals(entity.getId())
+                        && Boolean.TRUE.equals(entity.getDeleted())
+        ));
+        verify(auditService).record(argThat(command ->
+                "FOLDER".equals(command.getModuleCode())
+                        && "UNFAVORITE".equals(command.getOperationType())
+                        && Long.valueOf(10L).equals(command.getBizId())
+                        && "项目资料".equals(command.getObjectName())
+                        && "employee 取消收藏文件夹《项目资料》".equals(command.getActionSummary())
         ));
     }
 

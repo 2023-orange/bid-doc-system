@@ -12,6 +12,8 @@ public class FolderPermissionRespDTO {
     private Boolean canDelete;
     private Boolean canMove;
     private Boolean canCopy;
+    private Boolean canGrant;
+    private Boolean canManage;
     private Boolean canFavorite;
     private Boolean isOwner;
     private Boolean isManager;

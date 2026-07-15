@@ -30,6 +30,7 @@ import com.example.biddoc.project.mapper.ProjectMemberMapper;
 import com.example.biddoc.project.mapper.ProjectMapper;
 import com.example.biddoc.project.service.ProjectChecklistService;
 import com.example.biddoc.project.service.ProjectPermissionService;
+import com.example.biddoc.workflow.dto.resp.ApprovalHandleResultRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalHistoryRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalTaskRespDTO;
 import com.example.biddoc.workflow.entity.ApprovalActionLogEntity;
@@ -241,25 +242,27 @@ public class ApprovalServiceImpl implements ApprovalService {
     @Override
     public List<ApprovalTaskRespDTO> listMyTasks(String status) {
         UserContext.UserInfo user = requireCurrentUser();
-        return approvalTaskMapper.selectList(
-                Wrappers.<ApprovalTaskEntity>lambdaQuery()
-                        .eq(ApprovalTaskEntity::getApproverUserId, user.getUserId())
-                        .eq(ApprovalTaskEntity::getDeleted, false)
-                        .eq(StringUtils.hasText(status), ApprovalTaskEntity::getStatus, status)
-                        .orderByDesc(ApprovalTaskEntity::getCreatedAt)
-        ).stream().map(this::toTaskRespDTO).toList();
+        var query = Wrappers.<ApprovalTaskEntity>lambdaQuery()
+                .eq(ApprovalTaskEntity::getDeleted, false)
+                .eq(StringUtils.hasText(status), ApprovalTaskEntity::getStatus, status);
+        // 超级管理员承担全局审批监管职责，可以查看所有审批任务；普通用户仍只能查看分配给自己的任务。
+        if (!user.isSuperAdmin()) {
+            query.eq(ApprovalTaskEntity::getApproverUserId, user.getUserId());
+        }
+        return approvalTaskMapper.selectList(query.orderByDesc(ApprovalTaskEntity::getCreatedAt))
+                .stream().map(task -> toTaskRespDTO(task, user)).toList();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void approve(Long taskId, String comment) {
-        handle(taskId, comment, STATUS_APPROVED);
+    public ApprovalHandleResultRespDTO approve(Long taskId, String comment) {
+        return handle(taskId, comment, STATUS_APPROVED);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void reject(Long taskId, String comment) {
-        handle(taskId, comment, STATUS_REJECTED);
+    public ApprovalHandleResultRespDTO reject(Long taskId, String comment) {
+        return handle(taskId, comment, STATUS_REJECTED);
     }
 
     @Override
@@ -424,7 +427,7 @@ public class ApprovalServiceImpl implements ApprovalService {
         return instances.stream().flatMap(instance -> enrichHistory(instance)).toList();
     }
 
-    private void handle(Long taskId, String comment, String finalStatus) {
+    private ApprovalHandleResultRespDTO handle(Long taskId, String comment, String finalStatus) {
         UserContext.UserInfo user = requireCurrentUser();
         ApprovalTaskEntity task = requirePendingTask(taskId);
         if (!Objects.equals(task.getApproverUserId(), user.getUserId()) && !user.isSuperAdmin()) {
@@ -448,7 +451,7 @@ public class ApprovalServiceImpl implements ApprovalService {
                     "taskId", String.valueOf(taskId),
                     "status", STATUS_REJECTED));
             notifySubmitter(instance, "审批结果", "你的审批已驳回");
-            return;
+            return handleResult(task.getStatus(), instance.getStatus(), true, null);
         }
 
         if (instance.getDefinitionId() == null || task.getNodeId() == null) {
@@ -462,7 +465,7 @@ public class ApprovalServiceImpl implements ApprovalService {
                     "status", STATUS_APPROVED,
                     "fallback", true));
             notifySubmitter(instance, "审批结果", "你的审批已通过");
-            return;
+            return handleResult(task.getStatus(), instance.getStatus(), true, null);
         }
 
         if (hasPendingSiblingTask(task)) {
@@ -472,7 +475,7 @@ public class ApprovalServiceImpl implements ApprovalService {
                     "taskId", String.valueOf(taskId),
                     "status", STATUS_PENDING,
                     "waitingSiblingTask", true));
-            return;
+            return handleResult(task.getStatus(), instance.getStatus(), false, null);
         }
 
         ApprovalTaskEntity nextTask = approvalFlowEngineService.createNextTask(instance, task,
@@ -488,6 +491,7 @@ public class ApprovalServiceImpl implements ApprovalService {
                     "taskId", String.valueOf(taskId),
                     "status", STATUS_APPROVED));
             notifySubmitter(instance, "审批结果", "你的审批已通过");
+            return handleResult(task.getStatus(), instance.getStatus(), true, null);
         } else {
             instance.setStatus(STATUS_PENDING);
             approvalInstanceMapper.updateById(instance);
@@ -504,7 +508,19 @@ public class ApprovalServiceImpl implements ApprovalService {
                     "approverUserId", String.valueOf(nextTask.getApproverUserId()),
                     "status", STATUS_PENDING));
             notifyTask(nextTask, instance, "新的审批节点待办", "请继续处理审批任务");
+            return handleResult(task.getStatus(), instance.getStatus(), false, nextTask);
         }
+    }
+
+    private ApprovalHandleResultRespDTO handleResult(String taskStatus, String instanceStatus,
+                                                     boolean completed, ApprovalTaskEntity nextTask) {
+        ApprovalHandleResultRespDTO dto = new ApprovalHandleResultRespDTO();
+        dto.setTaskStatus(taskStatus);
+        dto.setInstanceStatus(instanceStatus);
+        dto.setCompleted(completed);
+        dto.setNextTaskId(nextTask != null ? nextTask.getId() : null);
+        dto.setNextNodeName(nextTask != null ? resolveNodeName(nextTask.getNodeId()) : null);
+        return dto;
     }
 
     private Long resolveProjectOwner(Long projectId) {
@@ -538,7 +554,7 @@ public class ApprovalServiceImpl implements ApprovalService {
         return user;
     }
 
-    private ApprovalTaskRespDTO toTaskRespDTO(ApprovalTaskEntity entity) {
+    private ApprovalTaskRespDTO toTaskRespDTO(ApprovalTaskEntity entity, UserContext.UserInfo user) {
         ApprovalTaskRespDTO dto = new ApprovalTaskRespDTO();
         dto.setTaskId(entity.getId());
         dto.setInstanceId(entity.getInstanceId());
@@ -548,14 +564,121 @@ public class ApprovalServiceImpl implements ApprovalService {
             dto.setDefinitionName(resolveDefinitionName(instance.getDefinitionId()));
             dto.setBizModule(instance.getBizModule());
             dto.setBizId(instance.getBizId());
+            dto.setInstanceStatus(instance.getStatus());
+            dto.setInstanceStatusName(statusName(instance.getStatus()));
+            dto.setSubmitterName(resolveUserName(instance.getSubmitterUserId()));
+            fillBusinessInfo(dto, instance);
         }
         dto.setNodeName(resolveNodeName(entity.getNodeId()));
         dto.setApproverUserId(entity.getApproverUserId());
+        dto.setApproverName(resolveUserName(entity.getApproverUserId()));
+        dto.setHandlerUserId(resolveHandlerUserId(entity));
+        dto.setHandlerName(resolveUserName(dto.getHandlerUserId()));
         dto.setStatus(entity.getStatus());
         dto.setComment(entity.getComment());
+        fillActionFlags(dto, entity, instance, user);
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setHandledAt(entity.getHandledAt());
         return dto;
+    }
+
+    private void fillBusinessInfo(ApprovalTaskRespDTO dto, ApprovalInstanceEntity instance) {
+        if (instance.getDocumentId() != null) {
+            DocumentEntity document = documentMapper.selectById(instance.getDocumentId());
+            if (document != null) {
+                dto.setDocumentName(document.getName());
+                dto.setDocumentNo(document.getDocumentNo());
+            }
+        }
+
+        if (BIZ_TYPE_CHECKLIST_ITEM.equals(instance.getBizType()) && instance.getBizId() != null) {
+            ProjectChecklistItemEntity item = projectChecklistItemMapper.selectById(instance.getBizId());
+            if (item != null) {
+                dto.setChecklistItemName(item.getItemName());
+                ProjectEntity project = projectMapper.selectById(item.getProjectId());
+                if (project != null) {
+                    dto.setProjectName(project.getProjectName());
+                }
+            }
+        }
+        dto.setBusinessTitle(buildBusinessTitle(dto, instance));
+    }
+
+    private String buildBusinessTitle(ApprovalTaskRespDTO dto, ApprovalInstanceEntity instance) {
+        if (BIZ_TYPE_CHECKLIST_ITEM.equals(instance.getBizType())) {
+            if (StringUtils.hasText(dto.getProjectName()) && StringUtils.hasText(dto.getChecklistItemName())) {
+                return dto.getProjectName() + " / " + dto.getChecklistItemName();
+            }
+            return StringUtils.hasText(dto.getChecklistItemName()) ? dto.getChecklistItemName() : dto.getProjectName();
+        }
+        if (BIZ_TYPE_DOCUMENT_VERSION.equals(instance.getBizType())) {
+            String versionSuffix = instance.getVersionNo() != null ? " v" + instance.getVersionNo() : "";
+            return StringUtils.hasText(dto.getDocumentName()) ? dto.getDocumentName() + versionSuffix : null;
+        }
+        return dto.getDocumentName();
+    }
+
+    private Long resolveHandlerUserId(ApprovalTaskEntity task) {
+        ApprovalActionLogEntity log = approvalActionLogMapper.selectOne(Wrappers.<ApprovalActionLogEntity>lambdaQuery()
+                .eq(ApprovalActionLogEntity::getTaskId, task.getId())
+                .eq(ApprovalActionLogEntity::getDeleted, false)
+                .orderByDesc(ApprovalActionLogEntity::getActionAt)
+                .orderByDesc(ApprovalActionLogEntity::getCreatedAt)
+                .last("limit 1"));
+        return log != null ? log.getActionUserId() : null;
+    }
+
+    private void fillActionFlags(ApprovalTaskRespDTO dto, ApprovalTaskEntity task,
+                                 ApprovalInstanceEntity instance, UserContext.UserInfo user) {
+        boolean pendingTask = STATUS_PENDING.equals(task.getStatus());
+        boolean currentHandler = Objects.equals(task.getApproverUserId(), user.getUserId());
+        boolean canHandleTask = pendingTask && (currentHandler || user.isSuperAdmin());
+        boolean pendingInstance = instance != null && STATUS_PENDING.equals(instance.getStatus());
+        boolean submitter = instance != null && Objects.equals(instance.getSubmitterUserId(), user.getUserId());
+
+        // 这些字段只用于前端按钮展示；真正的权限边界仍由对应动作接口再次校验。
+        dto.setCanApprove(canHandleTask);
+        dto.setCanReject(canHandleTask);
+        dto.setCanTransfer(canHandleTask);
+        dto.setCanAddSign(canHandleTask);
+        dto.setCanWithdraw(pendingInstance && (submitter || user.isSuperAdmin()));
+        dto.setCanTerminate(pendingInstance && user.isSuperAdmin());
+    }
+
+    private String resolveUserName(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) {
+            return null;
+        }
+        return StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername();
+    }
+
+    private String statusName(String status) {
+        if (STATUS_PENDING.equals(status)) {
+            return "待审批";
+        }
+        if (STATUS_APPROVED.equals(status)) {
+            return "已通过";
+        }
+        if (STATUS_REJECTED.equals(status)) {
+            return "已驳回";
+        }
+        if (STATUS_WITHDRAWN.equals(status)) {
+            return "已撤回";
+        }
+        if (STATUS_TERMINATED.equals(status)) {
+            return "已终止";
+        }
+        if (STATUS_TRANSFERRED.equals(status)) {
+            return "已转交";
+        }
+        if (STATUS_CANCELLED.equals(status)) {
+            return "已取消";
+        }
+        return status;
     }
 
     private ApprovalHistoryRespDTO toHistoryRespDTO(ApprovalInstanceEntity instance, ApprovalTaskEntity task) {
@@ -826,13 +949,69 @@ public class ApprovalServiceImpl implements ApprovalService {
     private void recordApprovalAudit(ApprovalInstanceEntity instance, String operationType,
                                      Map<String, Object> afterData) {
         boolean checklistApproval = BIZ_TYPE_CHECKLIST_ITEM.equals(instance.getBizType());
+        String objectName = resolveApprovalObjectName(instance);
         auditService.record(AuditRecordCommand.builder()
                 .moduleCode(checklistApproval ? AuditModuleCodeEnum.PROJECT.getCode() : AuditModuleCodeEnum.DOCUMENT.getCode())
                 .bizType(instance.getBizType() != null ? instance.getBizType() : BIZ_TYPE_DOCUMENT)
                 .bizId(instance.getDocumentId() != null ? instance.getDocumentId() : instance.getBizId())
                 .operationType(operationType)
+                .objectName(objectName)
+                .actionSummary(buildApprovalSummary(operationType, objectName))
+                .relatedBizType("APPROVAL_INSTANCE")
+                .relatedBizId(instance.getId())
                 .afterData(afterData)
                 .build());
+    }
+
+    private String resolveApprovalObjectName(ApprovalInstanceEntity instance) {
+        if (BIZ_TYPE_CHECKLIST_ITEM.equals(instance.getBizType()) && instance.getBizId() != null) {
+            ProjectChecklistItemEntity item = projectChecklistItemMapper.selectById(instance.getBizId());
+            if (item != null && StringUtils.hasText(item.getItemName())) {
+                return item.getItemName();
+            }
+        }
+        if (instance.getDocumentId() != null) {
+            DocumentEntity document = documentMapper.selectById(instance.getDocumentId());
+            if (document != null && StringUtils.hasText(document.getName())) {
+                return document.getName();
+            }
+        }
+        return null;
+    }
+
+    private String buildApprovalSummary(String operationType, String objectName) {
+        String actor = currentActorName();
+        String target = StringUtils.hasText(objectName) ? "《" + objectName + "》" : "";
+        if (AuditOperationTypeEnum.APPROVAL_SUBMIT.getCode().equals(operationType)) {
+            return actor + " 提交了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_APPROVE.getCode().equals(operationType)) {
+            return actor + " 通过了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_REJECT.getCode().equals(operationType)) {
+            return actor + " 驳回了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_WITHDRAW.getCode().equals(operationType)) {
+            return actor + " 撤回了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_TRANSFER.getCode().equals(operationType)) {
+            return actor + " 转交了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_ADD_SIGN.getCode().equals(operationType)) {
+            return actor + " 加签了" + target + "审批";
+        }
+        if (AuditOperationTypeEnum.APPROVAL_TERMINATE.getCode().equals(operationType)) {
+            return actor + " 终止了" + target + "审批";
+        }
+        return actor + " 更新了" + target + "审批";
+    }
+
+    private String currentActorName() {
+        UserContext.UserInfo user = UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return StringUtils.hasText(user.getUsername()) ? user.getUsername() : String.valueOf(user.getUserId());
     }
 
     private Stream<ApprovalHistoryRespDTO> enrichHistory(ApprovalInstanceEntity instance) {

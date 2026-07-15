@@ -1,6 +1,7 @@
 package com.example.biddoc.workflow.service;
 
 import com.example.biddoc.workflow.dto.resp.ApprovalHistoryRespDTO;
+import com.example.biddoc.workflow.dto.resp.ApprovalHandleResultRespDTO;
 import com.example.biddoc.workflow.dto.resp.ApprovalTaskRespDTO;
 
 import java.util.List;
@@ -15,9 +16,9 @@ public interface ApprovalService {
 
     List<ApprovalTaskRespDTO> listMyTasks(String status);
 
-    void approve(Long taskId, String comment);
+    ApprovalHandleResultRespDTO approve(Long taskId, String comment);
 
-    void reject(Long taskId, String comment);
+    ApprovalHandleResultRespDTO reject(Long taskId, String comment);
 
     void withdraw(Long instanceId, String comment);
 

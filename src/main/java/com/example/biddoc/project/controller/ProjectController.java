@@ -7,7 +7,9 @@ import com.example.biddoc.project.dto.req.ProjectMemberSaveReqDTO;
 import com.example.biddoc.project.dto.req.ProjectStageUpdateReqDTO;
 import com.example.biddoc.project.dto.req.ProjectStatusUpdateReqDTO;
 import com.example.biddoc.project.dto.req.ProjectUpdateReqDTO;
+import com.example.biddoc.project.dto.resp.ProjectArchiveDetailRespDTO;
 import com.example.biddoc.project.dto.resp.ProjectRespDTO;
+import com.example.biddoc.project.dto.resp.ProjectWorkbenchRespDTO;
 import com.example.biddoc.project.service.ProjectService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,11 @@ public class ProjectController {
     @GetMapping("/{id}")
     public ApiResponse<ProjectRespDTO> get(@PathVariable Long id) {
         return ApiResponse.success(projectService.get(id));
+    }
+
+    @GetMapping("/{id}/workbench")
+    public ApiResponse<ProjectWorkbenchRespDTO> getWorkbench(@PathVariable Long id) {
+        return ApiResponse.success(projectService.getWorkbench(id));
     }
 
     @GetMapping
@@ -78,5 +85,10 @@ public class ProjectController {
     public ApiResponse<Void> changeStatus(@PathVariable Long id, @Valid @RequestBody ProjectStatusUpdateReqDTO req) {
         projectService.changeStatus(id, req.getProjectStatus());
         return ApiResponse.success();
+    }
+
+    @GetMapping("/{id}/archive")
+    public ApiResponse<ProjectArchiveDetailRespDTO> getArchiveDetail(@PathVariable Long id) {
+        return ApiResponse.success(projectService.getArchiveDetail(id));
     }
 }

@@ -24,6 +24,7 @@ public class ProjectEntity {
     private String projectStatus;
     private OffsetDateTime bidDeadline;
     private Long folderId;
+    private String remark;
 
     @TableField(fill = FieldFill.INSERT)
     private OffsetDateTime createdAt;

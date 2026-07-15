@@ -6,7 +6,7 @@ import lombok.Data;
 
 /**
  * 复制文件夹请求。
- * targetName 为空时新根节点沿用源节点名；提供 targetName 可在目标父下避免重名冲突。
+ * targetName 为空时新根节点使用“原名称 - 副本”；重名由服务层自动追加序号。
  * Copy 始终复制整子树（含所有后代），但不复制 grant/manager/favorite。
  */
 @Data

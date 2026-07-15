@@ -9,7 +9,9 @@ public class DepartmentConvertor {
         SysDepartment dept = new SysDepartment();
         dept.setName(dto.getName());
         dept.setParentId(dto.getParentId());
-        dept.setLevel(dto.getLevel());
+        dept.setSortOrder(dto.getSortOrder());
+        dept.setManagerUserId(dto.getManagerUserId());
+        dept.setStatus(dto.getStatus());
         dept.setRemark(dto.getRemark());
         return dept;
     }

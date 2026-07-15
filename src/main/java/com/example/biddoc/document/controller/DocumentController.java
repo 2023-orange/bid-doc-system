@@ -100,10 +100,21 @@ public class DocumentController {
             @PathVariable Long folderId,
             @RequestParam(value = "page", required = false, defaultValue = "1") Integer page,
             @RequestParam(value = "size", required = false, defaultValue = "20") Integer size,
-            @RequestParam(value = "sort", required = false, defaultValue = "createdAt") String sort,
-            @RequestParam(value = "order", required = false, defaultValue = "desc") String order) {
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "sort", required = false) String sort,
+            @RequestParam(value = "order", required = false) String order,
+            @RequestParam(value = "sortBy", required = false) String sortBy,
+            @RequestParam(value = "sortOrder", required = false) String sortOrder) {
 
-        PageResponse<DocumentListItemRespDTO> result = documentService.listDocuments(folderId, page, size, sort, order);
+        // 前端新参数优先，同时兼容旧版 sort/order，避免已有调用方被迫同步升级。
+        String effectiveSort = sortBy != null && !sortBy.isBlank()
+                ? sortBy
+                : (sort != null && !sort.isBlank() ? sort : "createdAt");
+        String effectiveOrder = sortOrder != null && !sortOrder.isBlank()
+                ? sortOrder
+                : (order != null && !order.isBlank() ? order : "desc");
+        PageResponse<DocumentListItemRespDTO> result =
+                documentService.listDocuments(folderId, page, size, effectiveSort, effectiveOrder, keyword);
         return ApiResponse.success(result);
     }
 

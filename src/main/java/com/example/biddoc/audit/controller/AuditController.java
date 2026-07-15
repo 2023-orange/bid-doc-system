@@ -9,8 +9,11 @@ import com.example.biddoc.common.result.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/audit")
@@ -23,5 +26,17 @@ public class AuditController {
     @SaCheckRole("SUPER_ADMIN")
     public ApiResponse<PageResponse<AuditLogRespDTO>> queryLogs(@ModelAttribute AuditQueryReqDTO req) {
         return ApiResponse.success(auditService.queryLogs(req));
+    }
+
+    @GetMapping("/logs/{id}")
+    @SaCheckRole("SUPER_ADMIN")
+    public ApiResponse<AuditLogRespDTO> queryLogDetail(@PathVariable Long id) {
+        return ApiResponse.success(auditService.queryLogDetail(id));
+    }
+
+    @GetMapping("/timeline")
+    @SaCheckRole("SUPER_ADMIN")
+    public ApiResponse<List<AuditLogRespDTO>> queryTimeline(@ModelAttribute AuditQueryReqDTO req) {
+        return ApiResponse.success(auditService.queryTimeline(req));
     }
 }

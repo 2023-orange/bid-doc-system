@@ -58,7 +58,9 @@ sa-token:
   # 1. 物理有效期 (timeout): Token 在 Redis 中的绝对存活时间，单位: 秒。30天 = 2592000秒
   timeout: 2592000
   # 2. 临时有效期 (activity-timeout): 指定时间内无操作就踢下线，单位: 秒。30分钟 = 1800秒
-  activity-timeout: 1800
+  active-timeout: 1800
+  # 登录时会按 rememberMe 传入不同活跃超时时间，需开启动态 activeTimeout 才不会被全局配置覆盖。
+  dynamic-active-timeout: true
 
   # 是否允许同一账号并发登录 (false: 新登录挤掉旧登录)
   is-concurrent: false

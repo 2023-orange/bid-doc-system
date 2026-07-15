@@ -13,5 +13,8 @@ public class FolderTreeNodeRespDTO {
     private Integer level;
     private Integer sortNo;
     private Boolean hasChildren;
+    private Long documentCount;
+    private Long totalSize;
+    private OffsetDateTime lastAccessTime;
     private OffsetDateTime createdAt;
 }

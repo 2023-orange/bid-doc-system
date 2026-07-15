@@ -8,6 +8,21 @@ BEGIN;
 DELETE FROM doc_download_log;
 DELETE FROM doc_search_history;
 DELETE FROM audit_operation_log;
+DELETE FROM wf_approval_action_log;
+DELETE FROM wf_approval_task_candidate;
+DELETE FROM wf_approval_task;
+DELETE FROM wf_approval_instance;
+DELETE FROM doc_document_use_grant;
+DELETE FROM bid_project_archive_document_snapshot;
+DELETE FROM bid_project_archive_checklist_snapshot;
+DELETE FROM bid_project_archive_record;
+DELETE FROM bid_project_checklist_document;
+DELETE FROM bid_project_checklist_item;
+DELETE FROM bid_checklist_template_item;
+DELETE FROM bid_checklist_template;
+DELETE FROM bid_project_member;
+DELETE FROM bid_project;
+DELETE FROM bid_project_no_sequence;
 DELETE FROM doc_folder_favorite;
 DELETE FROM doc_folder_grant;
 DELETE FROM doc_folder_manager;
@@ -43,7 +58,7 @@ VALUES
     (3001000000000000005, '财务法务部', null, 1, null, 1, false, 'seed', 'seed', '负责财务结算、合同与合规审查', '{"office":"A座10层"}'),
     (3001000000000000011, '行政办公室', 3001000000000000001, 2, null, 1, false, 'seed', 'seed', '综合行政支持', null),
     (3001000000000000012, '人力资源部', 3001000000000000001, 2, null, 1, false, 'seed', 'seed', '人员、培训与组织信息维护', null),
-    (3001000000000000021, '投标管理部', 3001000000000000002, 2, null, 1, false, 'seed', 'seed', '投标文件统筹与过程管理', null),
+    (3001000000000000021, '投标管理部', 3001000000000000002, 2, null, 1, false, 'seed', 'seed', '投标文件统筹与过程管理', '{"abbr":"TB"}'),
     (3001000000000000022, '华东市场部', 3001000000000000002, 2, null, 1, false, 'seed', 'seed', '华东区域客户与商机跟进', null),
     (3001000000000000023, '华北市场部', 3001000000000000002, 2, null, 1, false, 'seed', 'seed', '华北区域客户与商机跟进', null),
     (3001000000000000031, '技术方案室', 3001000000000000003, 2, null, 1, false, 'seed', 'seed', '售前技术方案与投标技术标', null),
@@ -190,6 +205,72 @@ VALUES
     (3004100000000000013, 3004000000000000009, 1, '2026/06/11/dev-demo-3004000000000000009-v1.pdf', 2560, 'application/pdf', '2025年度投标复盘报告.pdf', 'demo-hash-0009-v1', 3002000000000000009, '归档报告上传', 'seed', 'seed'),
     (3004100000000000014, 3004000000000000010, 1, '2026/06/11/dev-demo-3004000000000000010-v1.docx', 4096, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '星河数据中心_机房扩容方案.docx', 'demo-hash-0010-v1', 3002000000000000004, '数据中心方案上传', 'seed', 'seed');
 
+-- 项目工作台演示数据：覆盖项目备注、成员职责、资料清单、绑定资料、关联审批和归档只读入口。
+INSERT INTO bid_project (id, project_no, project_name, tender_unit, owner_dept_id, project_type, project_stage, project_status, bid_deadline, folder_id, remark, created_by, updated_by)
+VALUES
+    (3005000000000000001, 'TB-20260620-001', '东海医院智能化改造项目', '东海市第一人民医院', 3001000000000000021, 'SMART_BUILDING', 'COLLECTING', 'NORMAL', now() + interval '10 days', 3003000000000000101, '重点医疗行业投标项目，商务标和技术标需同步推进。', 'seed', 'seed'),
+    (3005000000000000002, 'TB-20260620-002', '星河数据中心扩容项目', '星河云计算有限公司', 3001000000000000021, 'DATA_CENTER', 'REVIEWING', 'NORMAL', now() + interval '20 days', 3003000000000000102, '数据中心扩容项目，优先复用既有技术方案和资质资料。', 'seed', 'seed'),
+    (3005000000000000003, 'TB-20260620-003', '2025年度历史归档演示项目', '历史客户', 3001000000000000021, 'ARCHIVE_DEMO', 'ARCHIVED', 'ARCHIVED', now() - interval '60 days', 3003000000000000602, '已归档项目，用于验证工作台只读视角。', 'seed', 'seed');
+
+INSERT INTO bid_project_member (id, project_id, user_id, member_role, created_by)
+VALUES
+    (3005100000000000001, 3005000000000000001, 3002000000000000002, 'OWNER', 'seed'),
+    (3005100000000000002, 3005000000000000001, 3002000000000000003, 'MATERIAL_OWNER', 'seed'),
+    (3005100000000000003, 3005000000000000001, 3002000000000000004, 'MEMBER', 'seed'),
+    (3005100000000000004, 3005000000000000001, 3002000000000000006, 'MEMBER', 'seed'),
+    (3005100000000000005, 3005000000000000002, 3002000000000000002, 'OWNER', 'seed'),
+    (3005100000000000006, 3005000000000000002, 3002000000000000004, 'MATERIAL_OWNER', 'seed'),
+    (3005100000000000007, 3005000000000000003, 3002000000000000009, 'OWNER', 'seed');
+
+INSERT INTO bid_checklist_template (id, template_name, project_type, enabled, created_by, updated_by)
+VALUES
+    (3005200000000000001, '医疗智能化投标资料模板', 'SMART_BUILDING', true, 'seed', 'seed');
+
+INSERT INTO bid_checklist_template_item (id, template_id, item_name, description, required, business_category, tender_structure_category, suggested_sensitive_level, allowed_source, allowed_file_types, min_count, max_count, sort_order)
+VALUES
+    (3005210000000000001, 3005200000000000001, '营业执照', '企业营业执照扫描件', true, 'QUALIFICATION', '商务标', 'INTERNAL', 'COMMON_LIBRARY', 'pdf', 1, 1, 1),
+    (3005210000000000002, 3005200000000000001, '技术方案', '项目技术方案正文', true, 'TECHNICAL', '技术标', 'INTERNAL', 'PROJECT_UPLOAD', 'docx,pdf', 1, 2, 2),
+    (3005210000000000003, 3005200000000000001, '授权委托书', '法人授权委托及身份证明', true, 'LEGAL', '商务标', 'SENSITIVE', 'PROJECT_UPLOAD', 'pdf', 1, 1, 3),
+    (3005210000000000004, 3005200000000000001, '财务证明', '近三年财务证明材料', false, 'FINANCE', '商务标', 'SENSITIVE', 'COMMON_LIBRARY', 'pdf,xlsx', 1, 3, 4);
+
+INSERT INTO bid_project_checklist_item (id, project_id, template_item_id, item_name, description, required, business_category, tender_structure_category, sensitive_level, allowed_source, allowed_file_types, min_count, max_count, deadline, owner_user_id, status, sort_order)
+VALUES
+    (3005300000000000001, 3005000000000000001, 3005210000000000001, '营业执照', '企业营业执照扫描件', true, 'QUALIFICATION', '商务标', 'INTERNAL', 'COMMON_LIBRARY', 'pdf', 1, 1, now() + interval '3 days', 3002000000000000003, 'COMPLETE', 1),
+    (3005300000000000002, 3005000000000000001, 3005210000000000002, '技术方案', '项目技术方案正文', true, 'TECHNICAL', '技术标', 'INTERNAL', 'PROJECT_UPLOAD', 'docx,pdf', 1, 2, now() - interval '1 day', 3002000000000000004, 'NEED_SUPPLEMENT', 2),
+    (3005300000000000003, 3005000000000000001, 3005210000000000003, '授权委托书', '法人授权委托及身份证明', true, 'LEGAL', '商务标', 'SENSITIVE', 'PROJECT_UPLOAD', 'pdf', 1, 1, now() + interval '2 days', 3002000000000000003, 'PENDING_REVIEW', 3),
+    (3005300000000000004, 3005000000000000001, 3005210000000000004, '财务证明', '近三年财务证明材料', false, 'FINANCE', '商务标', 'SENSITIVE', 'COMMON_LIBRARY', 'pdf,xlsx', 1, 3, now() + interval '5 days', 3002000000000000006, 'PENDING_COLLECT', 4),
+    (3005300000000000005, 3005000000000000002, 3005210000000000002, '机房扩容方案', '数据中心扩容技术方案', true, 'TECHNICAL', '技术标', 'INTERNAL', 'PROJECT_UPLOAD', 'docx,pdf', 1, 2, now() + interval '12 days', 3002000000000000004, 'COMPLETE', 1),
+    (3005300000000000006, 3005000000000000003, 3005210000000000001, '历史归档营业执照', '归档时已完成的资质资料', true, 'QUALIFICATION', '商务标', 'INTERNAL', 'COMMON_LIBRARY', 'pdf', 1, 1, now() - interval '90 days', 3002000000000000009, 'ARCHIVED', 1);
+
+INSERT INTO bid_project_checklist_document (id, checklist_item_id, document_id, version_no, bind_type, created_by)
+VALUES
+    (3005400000000000001, 3005300000000000001, 3004000000000000004, 1, 'DOCUMENT', 'seed'),
+    (3005400000000000002, 3005300000000000002, 3004000000000000002, 3, 'DOCUMENT', 'seed'),
+    (3005400000000000003, 3005300000000000005, 3004000000000000010, 1, 'DOCUMENT', 'seed'),
+    (3005400000000000004, 3005300000000000006, 3004000000000000004, 1, 'DOCUMENT', 'seed');
+
+INSERT INTO wf_approval_instance (id, document_id, biz_module, biz_type, biz_id, version_no, scenario, submitter_user_id, status, submit_comment, submitted_at, deleted, created_by)
+VALUES
+    (3005500000000000001, null, 'PROJECT', 'CHECKLIST_ITEM', 3005300000000000003, null, 'CHECKLIST_ITEM_APPROVAL', 3002000000000000003, 'PENDING', '授权委托书已提交，请审核', now() - interval '6 hours', false, 'seed');
+
+INSERT INTO wf_approval_task (id, instance_id, document_id, approver_user_id, status, comment, deleted, created_by)
+VALUES
+    (3005510000000000001, 3005500000000000001, null, 3002000000000000002, 'PENDING', null, false, 'seed');
+
+INSERT INTO bid_project_archive_record (id, project_id, archive_no, archive_status, archived_at, archived_by, archive_reason, checklist_total, checklist_complete, document_total, snapshot_hash, remark, created_by, updated_by)
+VALUES
+    (3005600000000000001, 3005000000000000003, 'ARCH-TB-20260620-003', 'ARCHIVED', now() - interval '30 days', 3002000000000000009, '历史演示项目归档', 1, 1, 1, 'seed-archive-hash-001', '归档演示数据', 'seed', 'seed');
+
+INSERT INTO bid_project_archive_checklist_snapshot (id, archive_record_id, project_id, checklist_item_id, template_item_id, item_name, required_flag, item_status, bound_document_count, snapshot_json, created_by, updated_by)
+VALUES
+    (3005610000000000001, 3005600000000000001, 3005000000000000003, 3005300000000000006, 3005210000000000001, '历史归档营业执照', true, 'ARCHIVED', 1,
+     '{"businessCategory":"QUALIFICATION","tenderStructureCategory":"商务标","originalStatus":"COMPLETE"}', 'seed', 'seed');
+
+INSERT INTO bid_project_archive_document_snapshot (id, archive_record_id, project_id, checklist_item_id, document_id, version_no, document_name, document_status, version_status, expire_at, storage_type, file_size, snapshot_json, created_by, updated_by)
+VALUES
+    (3005620000000000001, 3005600000000000001, 3005000000000000003, 3005300000000000006, 3004000000000000004, 1, '东海医院_营业执照.pdf', 'APPROVED', 'APPROVED', null, 'LOCAL', 1024,
+     '{"documentNo":"DOC-202606-004","currentVersionNo":1,"storageKeyMasked":true}', 'seed', 'seed');
+
 INSERT INTO doc_search_history (id, user_id, keyword, folder_id, result_count, search_time)
 VALUES
     (3004200000000000001, 3002000000000000002, '东海医院', 3003000000000000101, 3, now() - interval '2 hours'),
@@ -221,7 +302,9 @@ VALUES
     (3004400000000000005, 'DOCUMENT', 'DOCUMENT', 3004000000000000002, 'NEW_VERSION', 3002000000000000004, 3001000000000000031, 'seed-doc-002', now() - interval '20 hours', '{"versionNo":2}', '{"versionNo":3}', '{"changeLog":"根据澄清意见修订"}', 'seed'),
     (3004400000000000006, 'DOCUMENT', 'DOCUMENT', 3004000000000000007, 'DOWNLOAD', 3002000000000000008, 3001000000000000022, 'seed-doc-003', now() - interval '9 hours', null, '{"name":"智慧园区标准技术方案.pptx"}', '{"ip":"127.0.0.1"}', 'seed'),
     (3004400000000000007, 'FOLDER', 'FOLDER', 3003000000000000602, 'FAVORITE', 3002000000000000009, 3001000000000000011, 'seed-folder-004', now() - interval '8 hours', null, '{"folderId":"3003000000000000602"}', '{"source":"front-demo"}', 'seed'),
-    (3004400000000000008, 'DOCUMENT', 'DOCUMENT', 3004000000000000006, 'DOWNLOAD', 3002000000000000006, 3001000000000000051, 'seed-doc-004', now() - interval '5 hours', null, '{"name":"采购合同模板_标准版.docx"}', '{"ip":"127.0.0.1"}', 'seed');
+    (3004400000000000008, 'DOCUMENT', 'DOCUMENT', 3004000000000000006, 'DOWNLOAD', 3002000000000000006, 3001000000000000051, 'seed-doc-004', now() - interval '5 hours', null, '{"name":"采购合同模板_标准版.docx"}', '{"ip":"127.0.0.1"}', 'seed'),
+    (3004400000000000009, 'PROJECT', 'PROJECT', 3005000000000000001, 'CREATE', 3002000000000000002, 3001000000000000021, 'seed-project-001', now() - interval '2 days', null, '{"projectName":"东海医院智能化改造项目","remark":"重点医疗行业投标项目"}', '{"source":"seed"}', 'seed'),
+    (3004400000000000010, 'PROJECT', 'CHECKLIST_ITEM', 3005300000000000003, 'APPROVAL_SUBMIT', 3002000000000000003, 3001000000000000021, 'seed-project-002', now() - interval '6 hours', null, '{"instanceId":"3005500000000000001","status":"PENDING"}', '{"projectId":"3005000000000000001"}', 'seed');
 
 -- 调整序列，避免后续接口插入时复用旧 ID。
 SELECT setval('sys_department_id_seq', GREATEST((SELECT COALESCE(MAX(id), 1) FROM sys_department), 1), true);

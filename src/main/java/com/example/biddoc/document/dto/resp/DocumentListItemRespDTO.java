@@ -75,9 +75,24 @@ public class DocumentListItemRespDTO {
     private Long latestSize;
 
     /**
+     * 前端文件夹详情页使用的文件大小别名。
+     */
+    private Long size;
+
+    /**
      * 当前版本 MIME 类型
      */
     private String latestMime;
+
+    /**
+     * 前端文件夹详情页使用的 MIME 类型别名。
+     */
+    private String mimeType;
+
+    /**
+     * 前端文件夹详情页使用的状态别名。
+     */
+    private String status;
 
     /**
      * 所有者用户 ID
@@ -85,7 +100,22 @@ public class DocumentListItemRespDTO {
     private String ownerUserId;
 
     /**
+     * 首次上传者用户 ID，当前模型中与 ownerUserId 等价。
+     */
+    private String uploadedBy;
+
+    /**
+     * 首次上传者名称，优先取真实姓名。
+     */
+    private String uploadedByName;
+
+    /**
      * 创建时间
      */
     private OffsetDateTime createdAt;
+
+    /**
+     * 更新时间
+     */
+    private OffsetDateTime updatedAt;
 }

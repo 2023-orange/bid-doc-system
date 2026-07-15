@@ -8,6 +8,8 @@ import com.example.biddoc.audit.constant.AuditModuleCodeEnum;
 import com.example.biddoc.audit.constant.AuditOperationTypeEnum;
 import com.example.biddoc.audit.dto.AuditRecordCommand;
 import com.example.biddoc.audit.service.AuditService;
+import com.example.biddoc.auth.entity.SysUser;
+import com.example.biddoc.auth.mapper.SysUserMapper;
 import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
@@ -21,9 +23,11 @@ import com.example.biddoc.document.dto.resp.DocumentUploadRespDTO;
 import com.example.biddoc.document.dto.resp.DocumentVersionRespDTO;
 import com.example.biddoc.document.entity.DocumentEntity;
 import com.example.biddoc.document.entity.DocumentTagEntity;
+import com.example.biddoc.document.entity.DocumentUseGrantEntity;
 import com.example.biddoc.document.entity.DocumentVersionEntity;
 import com.example.biddoc.document.entity.DownloadLogEntity;
 import com.example.biddoc.document.mapper.DocumentTagMapper;
+import com.example.biddoc.document.mapper.DocumentUseGrantMapper;
 import com.example.biddoc.document.mapper.DocumentMapper;
 import com.example.biddoc.document.mapper.DocumentVersionMapper;
 import com.example.biddoc.document.service.DocumentService;
@@ -64,7 +68,9 @@ public class DocumentServiceImpl implements DocumentService {
     private final com.example.biddoc.document.mapper.SearchHistoryMapper searchHistoryMapper;
     private final com.example.biddoc.document.mapper.DownloadLogMapper downloadLogMapper;
     private final DocumentTagMapper documentTagMapper;
+    private final DocumentUseGrantMapper documentUseGrantMapper;
     private final FolderFavoriteMapper folderFavoriteMapper;
+    private final SysUserMapper sysUserMapper;
     private final StorageAdapter storageAdapter;
     private final AuditService auditService;
     private final NotificationService notificationService;
@@ -132,8 +138,8 @@ public class DocumentServiceImpl implements DocumentService {
             version.setContentHash(contentHash);
             version.setUploadedByUserId(currentUser.getUserId());
             version.setChangeLog(changeLog);
-            version.setApprovalStatus(VERSION_APPROVED);
-            version.setApprovedAt(OffsetDateTime.now());
+            // 首版也必须进入审批生命周期，不能因为是初次上传就绕过元数据补全和审批。
+            version.setApprovalStatus(VERSION_PENDING);
             documentVersionMapper.insert(version);
 
             // 11. 插入文档记录
@@ -161,7 +167,6 @@ public class DocumentServiceImpl implements DocumentService {
             afterData.put("versionNo", 1);
             afterData.put("size", file.getSize());
             afterData.put("mimeType", mimeType);
-            afterData.put("storageKey", storageKey);
             afterData.put("originalFilename", file.getOriginalFilename());
 
             Map<String, Object> extraData = new HashMap<>();
@@ -173,6 +178,8 @@ public class DocumentServiceImpl implements DocumentService {
                     .bizType("DOCUMENT")
                     .bizId(documentId)
                     .operationType(AuditOperationTypeEnum.UPLOAD.getCode())
+                    .objectName(documentName)
+                    .actionSummary(versionActionSummary("上传了", documentName, 1))
                     .beforeData(null)
                     .afterData(afterData)
                     .extraData(extraData)
@@ -276,6 +283,8 @@ public class DocumentServiceImpl implements DocumentService {
                 .bizType("DOCUMENT")
                 .bizId(documentId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(update.getName())
+                .actionSummary(simpleActionSummary("补充了资料元数据", update.getName()))
                 .afterData(Map.of("documentStatus", "READY_SUBMIT"))
                 .build());
     }
@@ -343,7 +352,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public PageResponse<DocumentListItemRespDTO> listDocuments(Long folderId, Integer page, Integer size,
-                                                               String sort, String order) {
+                                                               String sort, String order, String keyword) {
         // 1. 校验参数
         AssertUtil.notNull(folderId, ErrorCode.FOLDER_NOT_FOUND);
         page = page == null || page < 1 ? 1 : page;
@@ -359,7 +368,11 @@ public class DocumentServiceImpl implements DocumentService {
         // 3. 查询分页
         Page<DocumentEntity> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<DocumentEntity> wrapper = new LambdaQueryWrapper<DocumentEntity>()
-            .eq(DocumentEntity::getFolderId, folderId);
+            .eq(DocumentEntity::getFolderId, folderId)
+            .eq(DocumentEntity::getDeleted, false);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(DocumentEntity::getName, keyword.trim());
+        }
 
         // 排序
         switch (sort) {
@@ -378,9 +391,7 @@ public class DocumentServiceImpl implements DocumentService {
         IPage<DocumentEntity> pageResult = documentMapper.selectPage(pageParam, wrapper);
 
         // 4. 转换 DTO
-        List<DocumentListItemRespDTO> items = pageResult.getRecords().stream()
-            .map(this::toListItemRespDTO)
-            .collect(Collectors.toList());
+        List<DocumentListItemRespDTO> items = toListItemRespDTOs(pageResult.getRecords());
 
         return new PageResponse<>(
             items,
@@ -438,6 +449,8 @@ public class DocumentServiceImpl implements DocumentService {
                 .bizType("DOCUMENT")
                 .bizId(documentId)
                 .operationType(AuditOperationTypeEnum.DELETE.getCode())
+                .objectName(document.getName())
+                .actionSummary(simpleActionSummary("删除了", document.getName()))
                 .beforeData(beforeData)
                 .afterData(afterData)
                 .extraData(extraData)
@@ -531,6 +544,8 @@ public class DocumentServiceImpl implements DocumentService {
                     .bizType("DOCUMENT")
                     .bizId(documentId)
                     .operationType(AuditOperationTypeEnum.NEW_VERSION.getCode())
+                    .objectName(document.getName())
+                    .actionSummary(versionActionSummary("上传了新版本", document.getName(), nextVersionNo))
                     .beforeData(beforeData)
                     .afterData(afterData)
                     .extraData(extraData)
@@ -592,6 +607,7 @@ public class DocumentServiceImpl implements DocumentService {
         FolderEntity folder = folderMapper.selectById(document.getFolderId());
         AssertUtil.notNull(folder, ErrorCode.FOLDER_NOT_FOUND);
         folderPermissionService.checkView(folder);
+        enforceSensitiveAccess(document, folder, true, documentId, document.getCurrentVersionNo());
 
         // 3. 查询当前版本
         DocumentVersionEntity version = documentVersionMapper.selectOne(
@@ -608,7 +624,8 @@ public class DocumentServiceImpl implements DocumentService {
         recordDownloadLog(documentId, version.getVersionNo(), ipAddress, userAgent);
 
         // 6. 异步审计（不阻塞响应）
-        asyncAuditDownload(documentId, version.getVersionNo(), version.getSize());
+        asyncAuditDownload(documentId, version.getVersionNo(), version.getSize(),
+                document.getName(), ipAddress, userAgent);
 
         return new DownloadResult(
             inputStream,
@@ -651,7 +668,8 @@ public class DocumentServiceImpl implements DocumentService {
         recordDownloadLog(documentId, versionNo, ipAddress, userAgent);
 
         // 6. 异步审计（不阻塞响应）
-        asyncAuditDownload(documentId, versionNo, version.getSize());
+        asyncAuditDownload(documentId, versionNo, version.getSize(),
+                document.getName(), ipAddress, userAgent);
 
         return new DownloadResult(
             inputStream,
@@ -692,7 +710,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         InputStream inputStream = storageAdapter.get(version.getStorageKey());
-        asyncAuditPreview(documentId, versionNo, version.getSize(), ipAddress, userAgent);
+        asyncAuditPreview(documentId, versionNo, version.getSize(), document.getName(), ipAddress, userAgent);
 
         return new DownloadResult(
             inputStream,
@@ -845,7 +863,8 @@ public class DocumentServiceImpl implements DocumentService {
     /**
      * 异步审计下载事件
      */
-    private void asyncAuditDownload(Long documentId, Integer versionNo, Long size) {
+    private void asyncAuditDownload(Long documentId, Integer versionNo, Long size,
+                                    String documentName, String ipAddress, String userAgent) {
         try {
             Map<String, Object> afterData = new HashMap<>();
             afterData.put("versionNo", versionNo);
@@ -857,6 +876,10 @@ public class DocumentServiceImpl implements DocumentService {
                     .bizType("DOCUMENT")
                     .bizId(documentId)
                     .operationType(AuditOperationTypeEnum.DOWNLOAD.getCode())
+                    .objectName(documentName)
+                    .actionSummary(versionActionSummary("下载了", documentName, versionNo))
+                    .clientIp(ipAddress)
+                    .userAgent(userAgent)
                     .beforeData(null)
                     .afterData(afterData)
                     .extraData(Collections.emptyMap())
@@ -891,7 +914,8 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    private void asyncAuditPreview(Long documentId, Integer versionNo, Long size, String ipAddress, String userAgent) {
+    private void asyncAuditPreview(Long documentId, Integer versionNo, Long size,
+                                   String documentName, String ipAddress, String userAgent) {
         try {
             Map<String, Object> afterData = new HashMap<>();
             afterData.put("versionNo", versionNo);
@@ -907,6 +931,10 @@ public class DocumentServiceImpl implements DocumentService {
                     .bizType("DOCUMENT")
                     .bizId(documentId)
                     .operationType(AuditOperationTypeEnum.PREVIEW.getCode())
+                    .objectName(documentName)
+                    .actionSummary(versionActionSummary("预览了", documentName, versionNo))
+                    .clientIp(ipAddress)
+                    .userAgent(userAgent)
                     .afterData(afterData)
                     .extraData(extraData)
                     .build()
@@ -927,18 +955,45 @@ public class DocumentServiceImpl implements DocumentService {
                 && (currentUser.isSuperAdmin()
                 || Objects.equals(document.getOwnerUserId(), currentUser.getUserId())
                 || folderPermissionService.isManagerOfFolder(folder, currentUser.getUserId()));
-        boolean denied = "SECRET".equalsIgnoreCase(level) ? !privileged
-                : ("SENSITIVE".equalsIgnoreCase(level) && download && !privileged);
+        boolean granted = currentUser != null
+                && hasActiveUseGrant(documentId, versionNo, currentUser.getUserId());
+        boolean allowedByIdentity = privileged || granted;
+        boolean denied = "SECRET".equalsIgnoreCase(level) ? !allowedByIdentity
+                : ("SENSITIVE".equalsIgnoreCase(level) && download && !allowedByIdentity);
         if (denied) {
             auditService.record(AuditRecordCommand.builder()
                     .moduleCode(AuditModuleCodeEnum.DOCUMENT.getCode())
                     .bizType("DOCUMENT")
                     .bizId(documentId)
                     .operationType(download ? AuditOperationTypeEnum.DOWNLOAD.getCode() : AuditOperationTypeEnum.PREVIEW.getCode())
+                    .objectName(document.getName())
+                    .actionSummary(versionActionSummary(download ? "尝试下载受限资料" : "尝试预览受限资料",
+                            document.getName(), versionNo))
                     .afterData(Map.of("versionNo", versionNo, "denied", true, "sensitiveLevel", level))
                     .build());
             throw new BusinessException(ErrorCode.DOCUMENT_SENSITIVE_ACCESS_DENIED);
         }
+    }
+
+    private boolean hasActiveUseGrant(Long documentId, Integer versionNo, Long granteeId) {
+        if (documentId == null || versionNo == null || granteeId == null) {
+            return false;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        // 授权固定到资料版本和被授权人，避免版本切换后旧授权扩大到新内容。
+        Long count = documentUseGrantMapper.selectCount(new LambdaQueryWrapper<DocumentUseGrantEntity>()
+                .eq(DocumentUseGrantEntity::getDocumentId, documentId)
+                .eq(DocumentUseGrantEntity::getVersionNo, versionNo)
+                .eq(DocumentUseGrantEntity::getGranteeId, granteeId)
+                .in(DocumentUseGrantEntity::getStatus, List.of("ACTIVE", "APPROVED"))
+                .eq(DocumentUseGrantEntity::getDeleted, false)
+                .and(wrapper -> wrapper.isNull(DocumentUseGrantEntity::getValidFrom)
+                        .or()
+                        .le(DocumentUseGrantEntity::getValidFrom, now))
+                .and(wrapper -> wrapper.isNull(DocumentUseGrantEntity::getValidUntil)
+                        .or()
+                        .ge(DocumentUseGrantEntity::getValidUntil, now)));
+        return count != null && count > 0;
     }
 
     private boolean isPreviewableMimeType(String mimeType) {
@@ -972,6 +1027,10 @@ public class DocumentServiceImpl implements DocumentService {
      * 转换为列表项响应 DTO
      */
     private DocumentListItemRespDTO toListItemRespDTO(DocumentEntity document) {
+        return toListItemRespDTO(document, Collections.emptyMap());
+    }
+
+    private DocumentListItemRespDTO toListItemRespDTO(DocumentEntity document, Map<Long, SysUser> userById) {
         DocumentListItemRespDTO dto = new DocumentListItemRespDTO();
         dto.setId(String.valueOf(document.getId()));
         dto.setName(document.getName());
@@ -985,10 +1044,50 @@ public class DocumentServiceImpl implements DocumentService {
         dto.setApprovalStatus(document.getDocumentStatus());
         dto.setCurrentVersionNo(document.getCurrentVersionNo());
         dto.setLatestSize(document.getLatestSize());
+        dto.setSize(document.getLatestSize());
         dto.setLatestMime(document.getLatestMime());
+        dto.setMimeType(document.getLatestMime());
+        dto.setStatus(document.getDocumentStatus());
         dto.setOwnerUserId(String.valueOf(document.getOwnerUserId()));
+        dto.setUploadedBy(String.valueOf(document.getOwnerUserId()));
+        SysUser uploader = userById.get(document.getOwnerUserId());
+        if (uploader != null) {
+            dto.setUploadedByName(StringUtils.hasText(uploader.getRealName())
+                    ? uploader.getRealName()
+                    : uploader.getUsername());
+        }
         dto.setCreatedAt(document.getCreatedAt());
+        dto.setUpdatedAt(document.getUpdatedAt());
         return dto;
+    }
+
+    private List<DocumentListItemRespDTO> toListItemRespDTOs(List<DocumentEntity> documents) {
+        if (CollectionUtils.isEmpty(documents)) {
+            return Collections.emptyList();
+        }
+        // 列表页一次性补齐上传人名称，避免文件夹详情页按行查询用户造成 N+1。
+        Map<Long, SysUser> userById = loadUsersById(
+                documents.stream()
+                        .map(DocumentEntity::getOwnerUserId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .collect(Collectors.toList())
+        );
+        return documents.stream()
+                .map(document -> toListItemRespDTO(document, userById))
+                .collect(Collectors.toList());
+    }
+
+    private Map<Long, SysUser> loadUsersById(Collection<Long> userIds) {
+        if (CollectionUtils.isEmpty(userIds)) {
+            return Collections.emptyMap();
+        }
+        List<SysUser> users = sysUserMapper.selectBatchIds(userIds);
+        if (CollectionUtils.isEmpty(users)) {
+            return Collections.emptyMap();
+        }
+        return users.stream()
+                .collect(Collectors.toMap(SysUser::getId, user -> user, (left, right) -> left));
     }
 
     @Override
@@ -1079,9 +1178,7 @@ public class DocumentServiceImpl implements DocumentService {
         IPage<DocumentEntity> pageResult = documentMapper.selectPage(pageParam, wrapper);
 
         // 4. 转换 DTO
-        List<DocumentListItemRespDTO> items = pageResult.getRecords().stream()
-            .map(this::toListItemRespDTO)
-            .collect(Collectors.toList());
+        List<DocumentListItemRespDTO> items = toListItemRespDTOs(pageResult.getRecords());
 
         // 5. 记录搜索历史（仅当有关键词时记录）
         if (StringUtils.hasText(searchReq.getKeyword())) {
@@ -1533,6 +1630,8 @@ public class DocumentServiceImpl implements DocumentService {
                 .bizType("DOCUMENT_VERSION")
                 .bizId(documentId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(document.getName())
+                .actionSummary(versionActionSummary("更新了版本审批状态", document.getName(), versionNo))
                 .afterData(Map.of("versionNo", versionNo, "approvalStatus", status))
                 .build());
     }
@@ -1553,8 +1652,31 @@ public class DocumentServiceImpl implements DocumentService {
                 .bizType("DOCUMENT")
                 .bizId(documentId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(document.getName())
+                .actionSummary(simpleActionSummary("更新了资料状态", document.getName()))
                 .afterData(Map.of("documentStatus", status))
                 .build());
+    }
+
+    private String simpleActionSummary(String action, String documentName) {
+        return currentActorName() + " " + action + "《" + safeObjectName(documentName) + "》";
+    }
+
+    private String versionActionSummary(String action, String documentName, Integer versionNo) {
+        String versionSuffix = versionNo != null ? " v" + versionNo : "";
+        return simpleActionSummary(action, documentName) + versionSuffix;
+    }
+
+    private String currentActorName() {
+        UserContext.UserInfo user = UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return StringUtils.hasText(user.getUsername()) ? user.getUsername() : String.valueOf(user.getUserId());
+    }
+
+    private String safeObjectName(String name) {
+        return StringUtils.hasText(name) ? name : "未命名资料";
     }
 
     /**

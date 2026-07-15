@@ -116,6 +116,8 @@ public class FolderGrantServiceImpl implements FolderGrantService {
                 .bizType("FOLDER")
                 .bizId(folderId)
                 .operationType(AuditOperationTypeEnum.GRANT_ADD.getCode())
+                .objectName(folder.getName())
+                .actionSummary(currentActorName() + " 为文件夹《" + folder.getName() + "》新增授权")
                 .afterData(afterData)
                 .extraData(extraData)
                 .build());
@@ -170,12 +172,24 @@ public class FolderGrantServiceImpl implements FolderGrantService {
                 .bizType("FOLDER")
                 .bizId(folderId)
                 .operationType(AuditOperationTypeEnum.GRANT_REMOVE.getCode())
+                .objectName(folder.getName())
+                .actionSummary(currentActorName() + " 移除了文件夹《" + folder.getName() + "》授权")
                 .beforeData(beforeData)
                 .extraData(extraData)
                 .build());
     }
 
     // ---- 私有辅助方法 ----
+
+    private String currentActorName() {
+        UserContext.UserInfo user = UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return user.getUsername() != null && !user.getUsername().isBlank()
+                ? user.getUsername()
+                : String.valueOf(user.getUserId());
+    }
 
     private FolderEntity getExistingFolder(Long folderId) {
         FolderEntity folder = folderMapper.selectOne(

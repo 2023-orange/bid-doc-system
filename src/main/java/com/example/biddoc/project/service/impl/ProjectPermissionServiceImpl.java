@@ -5,7 +5,9 @@ import com.example.biddoc.common.constant.UserContext;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.project.constant.ProjectMemberRoleEnum;
+import com.example.biddoc.project.entity.ProjectChecklistItemEntity;
 import com.example.biddoc.project.entity.ProjectMemberEntity;
+import com.example.biddoc.project.mapper.ProjectChecklistItemMapper;
 import com.example.biddoc.project.mapper.ProjectMemberMapper;
 import com.example.biddoc.project.service.ProjectPermissionService;
 import lombok.RequiredArgsConstructor;
@@ -18,11 +20,13 @@ import java.util.Objects;
 public class ProjectPermissionServiceImpl implements ProjectPermissionService {
 
     private final ProjectMemberMapper projectMemberMapper;
+    private final ProjectChecklistItemMapper checklistItemMapper;
 
     @Override
     public void checkView(Long projectId) {
         UserContext.UserInfo user = requireUser();
-        if (user.isSuperAdmin() || isMember(projectId, user.getUserId(), null)) {
+        if (user.isSuperAdmin() || isMember(projectId, user.getUserId(), null)
+                || isChecklistOwner(projectId, user.getUserId())) {
             return;
         }
         throw new BusinessException(ErrorCode.PROJECT_PERMISSION_DENIED);
@@ -82,6 +86,14 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
             wrapper.eq(ProjectMemberEntity::getMemberRole, role);
         }
         return projectMemberMapper.selectCount(wrapper) > 0;
+    }
+
+    private boolean isChecklistOwner(Long projectId, Long userId) {
+        // 清单责任人虽不一定是项目成员，但需要查看项目上下文才能完成资料收集任务。
+        return checklistItemMapper.selectCount(new LambdaQueryWrapper<ProjectChecklistItemEntity>()
+                .eq(ProjectChecklistItemEntity::getProjectId, projectId)
+                .eq(ProjectChecklistItemEntity::getOwnerUserId, userId)
+                .eq(ProjectChecklistItemEntity::getDeleted, false)) > 0;
     }
 
     private UserContext.UserInfo requireUser() {

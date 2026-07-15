@@ -17,6 +17,7 @@ public class SysDepartment {
     private String name;
     private Long parentId;
     private Integer level;
+    private Integer sortOrder;
 
     private Long managerUserId;
 

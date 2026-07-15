@@ -35,3 +35,6 @@ build/
 
 ### Goal-1: Local storage ###
 .local-storage/
+
+### Local-only Spring Boot config ###
+application-local.yml

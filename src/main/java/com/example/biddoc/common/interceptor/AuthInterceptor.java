@@ -13,7 +13,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 管理接口权限拦截器
  * <p>
  * /api/v1/users/** → 仅 SUPER_ADMIN<br/>
- * /api/v1/departments/** → SUPER_ADMIN 或 DEPT_MANAGER
+ * /api/v1/departments/** → 查询允许 SUPER_ADMIN 或 DEPT_MANAGER，写操作按管理风险收紧
  */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
@@ -33,13 +33,30 @@ public class AuthInterceptor implements HandlerInterceptor {
                 throw new BusinessException(ErrorCode.PERMISSION_DENIED);
             }
         } else if (path.startsWith("/api/v1/departments")) {
-            if (!StpUtil.hasRole(RoleCodeEnum.SUPER_ADMIN.getCode())
-                    && !StpUtil.hasRole(RoleCodeEnum.DEPT_MANAGER.getCode())) {
+            if (!hasDepartmentPermission(request)) {
                 throw new BusinessException(ErrorCode.PERMISSION_DENIED);
             }
         }
 
         return true;
+    }
+
+    private boolean hasDepartmentPermission(HttpServletRequest request) {
+        if (StpUtil.hasRole(RoleCodeEnum.SUPER_ADMIN.getCode())) {
+            return true;
+        }
+
+        String method = request.getMethod();
+        String path = request.getRequestURI();
+        boolean deptManager = StpUtil.hasRole(RoleCodeEnum.DEPT_MANAGER.getCode());
+
+        // TODO 部门经理的数据范围暂未实现；当前仅预留查询和启停入口，创建、编辑、删除仍需超级管理员。
+        if ("GET".equalsIgnoreCase(method)) {
+            return deptManager;
+        }
+        return deptManager
+                && "PATCH".equalsIgnoreCase(method)
+                && path.matches("/api/v1/departments/\\d+/status");
     }
 }
 

@@ -11,4 +11,5 @@ public class ProjectUpdateReqDTO {
     private String projectType;
     private OffsetDateTime bidDeadline;
     private Long folderId;
+    private String remark;
 }

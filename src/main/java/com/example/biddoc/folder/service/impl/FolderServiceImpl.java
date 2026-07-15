@@ -17,6 +17,8 @@ import com.example.biddoc.folder.dto.req.FolderCreateReqDTO;
 import com.example.biddoc.folder.dto.req.FolderMoveReqDTO;
 import com.example.biddoc.folder.dto.req.FolderRenameReqDTO;
 import com.example.biddoc.folder.dto.req.FolderUpdateReqDTO;
+import com.example.biddoc.folder.dto.resp.FolderActionResultRespDTO;
+import com.example.biddoc.folder.dto.resp.FolderBatchOperationRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderDetailRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderPermissionRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderTreeNodeRespDTO;
@@ -26,6 +28,7 @@ import com.example.biddoc.folder.mapper.FolderFavoriteMapper;
 import com.example.biddoc.folder.mapper.FolderGrantMapper;
 import com.example.biddoc.folder.mapper.FolderManagerMapper;
 import com.example.biddoc.folder.mapper.FolderMapper;
+import com.example.biddoc.folder.service.FolderInsightService;
 import com.example.biddoc.folder.service.FolderPermissionService;
 import com.example.biddoc.folder.service.FolderService;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +60,7 @@ public class FolderServiceImpl implements FolderService {
     private final FolderManagerMapper folderManagerMapper;
     private final FolderFavoriteMapper folderFavoriteMapper;
     private final FolderPermissionService folderPermissionService;
+    private final FolderInsightService folderInsightService;
     private final AuditService auditService;
     private final DocumentService documentService;
 
@@ -109,6 +113,8 @@ public class FolderServiceImpl implements FolderService {
                 .bizType("FOLDER")
                 .bizId(entity.getId())
                 .operationType(AuditOperationTypeEnum.CREATE.getCode())
+                .objectName(entity.getName())
+                .actionSummary(folderActionSummary("创建了文件夹", entity.getName()))
                 .afterData(createAfter)
                 .build());
 
@@ -117,9 +123,7 @@ public class FolderServiceImpl implements FolderService {
 
     @Override
     public FolderDetailRespDTO getById(Long id) {
-        FolderEntity entity = getExistingFolder(id, ErrorCode.FOLDER_NOT_FOUND);
-        folderPermissionService.checkView(entity);
-        return toDetailResp(entity);
+        return folderInsightService.getDetail(id);
     }
 
     @Override
@@ -145,6 +149,8 @@ public class FolderServiceImpl implements FolderService {
                 .bizType("FOLDER")
                 .bizId(id)
                 .operationType(AuditOperationTypeEnum.RENAME.getCode())
+                .objectName(name)
+                .actionSummary(currentActorName() + " 将文件夹《" + oldName + "》重命名为《" + name + "》")
                 .beforeData(renameBefore)
                 .afterData(renameAfter)
                 .build());
@@ -179,6 +185,8 @@ public class FolderServiceImpl implements FolderService {
                 .bizType("FOLDER")
                 .bizId(id)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(entity.getName())
+                .actionSummary(folderActionSummary("更新了文件夹", entity.getName()))
                 .beforeData(updateBefore)
                 .afterData(updateAfter)
                 .build());
@@ -225,6 +233,8 @@ public class FolderServiceImpl implements FolderService {
         dto.setCanDelete(folderPermissionService.canDelete(folder));
         dto.setCanMove(folderPermissionService.canMove(folder));
         dto.setCanCopy(folderPermissionService.canCopy(folder));
+        dto.setCanGrant(!Objects.equals(folder.getLevel(), ROOT_LEVEL) && (isSuperAdmin || isOwner || isManager));
+        dto.setCanManage(isSuperAdmin || isOwner || isManager);
         dto.setCanFavorite(dto.getCanView());
         dto.setIsOwner(isOwner);
         dto.setIsManager(isManager);
@@ -297,16 +307,21 @@ public class FolderServiceImpl implements FolderService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void batchDelete(FolderBatchDeleteReqDTO req) {
+    public FolderBatchOperationRespDTO batchDelete(FolderBatchDeleteReqDTO req) {
         if (req == null) {
             throw new BusinessException(ErrorCode.PARAM_INVALID, "request不能为空");
         }
         doBatchDelete(req.getFolderIds(), AuditOperationTypeEnum.BATCH_DELETE.getCode());
+        int successCount = (int) req.getFolderIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+        return FolderBatchOperationRespDTO.success(successCount);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void move(Long id, FolderMoveReqDTO req) {
+    public FolderActionResultRespDTO move(Long id, FolderMoveReqDTO req) {
         FolderEntity source = getExistingFolder(id, ErrorCode.FOLDER_NOT_FOUND);
 
         // MVP 不允许 move 到根级（targetParentId 必须 > 0）
@@ -334,7 +349,8 @@ public class FolderServiceImpl implements FolderService {
 
         // 权限：根级源会被 canMove 直接拒绝；非根源走 owner/manager/grant 链
         folderPermissionService.checkMove(source);
-        folderPermissionService.checkCreateChild(target);
+        // 前端移动语义是整理目标目录，目标父目录需要可编辑；创建子文件夹仍使用 canCreateChild。
+        folderPermissionService.checkEdit(target);
 
         // 目标父下不允许同名
         ensureNameUnique(target.getId(), source.getName(), null);
@@ -396,15 +412,18 @@ public class FolderServiceImpl implements FolderService {
                 .bizType("FOLDER")
                 .bizId(source.getId())
                 .operationType(AuditOperationTypeEnum.MOVE.getCode())
+                .objectName(source.getName())
+                .actionSummary(currentActorName() + " 将文件夹《" + source.getName() + "》移动到《" + target.getName() + "》下")
                 .beforeData(beforeData)
                 .afterData(afterData)
                 .extraData(extraData)
                 .build());
+        return folderInsightService.toActionResult(source.getId());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long copy(Long id, FolderCopyReqDTO req) {
+    public FolderActionResultRespDTO copy(Long id, FolderCopyReqDTO req) {
         FolderEntity source = getExistingFolder(id, ErrorCode.FOLDER_NOT_FOUND);
 
         Long targetParentId = req.getTargetParentId();
@@ -415,13 +434,11 @@ public class FolderServiceImpl implements FolderService {
         FolderEntity target = getExistingFolder(targetParentId, ErrorCode.FOLDER_PARENT_NOT_FOUND);
 
         folderPermissionService.checkCopy(source);
-        folderPermissionService.checkCreateChild(target);
+        // 复制落点同样按“整理目标目录”的 canEdit 校验，和移动接口保持一致。
+        folderPermissionService.checkEdit(target);
 
-        // 新根名：req.targetName 优先（非空时使用），空则沿用源名
-        String copyName = (req.getTargetName() != null && !req.getTargetName().trim().isEmpty())
-                ? normalizeName(req.getTargetName())
-                : source.getName();
-        ensureNameUnique(target.getId(), copyName, null);
+        // 新根名默认使用“原名称 - 副本”，重名时自动追加序号，减少前端二次确认成本。
+        String copyName = resolveCopyName(target.getId(), source.getName(), req.getTargetName());
 
         // 子树（level ASC, sort_no ASC）；保证父先于子，oldId→newId 映射可正常构建
         List<FolderEntity> subtree = folderMapper.selectSubtree(source.getId());
@@ -503,11 +520,13 @@ public class FolderServiceImpl implements FolderService {
                 .bizType("FOLDER")
                 .bizId(newRootId)
                 .operationType(AuditOperationTypeEnum.COPY.getCode())
+                .objectName(copyName)
+                .actionSummary(currentActorName() + " 复制文件夹《" + source.getName() + "》到《" + target.getName() + "》下")
                 .afterData(afterData)
                 .extraData(extraData)
                 .build());
 
-        return newRootId;
+        return folderInsightService.toActionResult(newRootId);
     }
 
     private FolderEntity getExistingFolder(Long id, ErrorCode notFoundCode) {
@@ -534,6 +553,30 @@ public class FolderServiceImpl implements FolderService {
         if (count != null && count > 0) {
             throw new BusinessException(ErrorCode.FOLDER_NAME_DUPLICATED);
         }
+    }
+
+    private String resolveCopyName(Long targetParentId, String sourceName, String requestedName) {
+        String baseName = requestedName != null && !requestedName.trim().isEmpty()
+                ? normalizeName(requestedName)
+                : normalizeName(sourceName) + " - 副本";
+        String candidate = baseName;
+        int suffix = 2;
+        // 复制接口按前端要求自动避让同名，保持整个复制事务原子完成。
+        while (folderNameExists(targetParentId, candidate)) {
+            candidate = baseName + " (" + suffix + ")";
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private boolean folderNameExists(Long parentId, String name) {
+        Long count = folderMapper.selectCount(
+                Wrappers.<FolderEntity>lambdaQuery()
+                        .eq(FolderEntity::getDeleted, false)
+                        .eq(FolderEntity::getParentId, parentId)
+                        .eq(FolderEntity::getName, name)
+        );
+        return count != null && count > 0;
     }
 
     private int nextSortNo(Long parentId) {
@@ -582,9 +625,11 @@ public class FolderServiceImpl implements FolderService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return children.stream()
+        List<FolderTreeNodeRespDTO> nodes = children.stream()
                 .map(entity -> toTreeNodeResp(entity, parentIdsWithChildren.contains(entity.getId())))
                 .toList();
+        folderInsightService.fillTreeNodeExtras(nodes);
+        return nodes;
     }
 
     private FolderDetailRespDTO toDetailResp(FolderEntity entity) {
@@ -723,13 +768,32 @@ public class FolderServiceImpl implements FolderService {
         extraData.put("affectedDocuments", affectedDocuments);
 
         Long bizId = retained.get(0).getId();
+        String objectName = retained.size() == 1 ? retained.get(0).getName() : "批量文件夹";
         auditService.record(AuditRecordCommand.builder()
                 .moduleCode(AuditModuleCodeEnum.FOLDER.getCode())
                 .bizType("FOLDER")
                 .bizId(bizId)
                 .operationType(operationType)
+                .objectName(objectName)
+                .actionSummary(folderActionSummary(
+                        AuditOperationTypeEnum.BATCH_DELETE.getCode().equals(operationType) ? "批量删除了" : "删除了",
+                        objectName))
                 .extraData(extraData)
                 .build());
+    }
+
+    private String folderActionSummary(String action, String folderName) {
+        return currentActorName() + " " + action + "《" + folderName + "》";
+    }
+
+    private String currentActorName() {
+        UserContext.UserInfo user = UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return user.getUsername() != null && !user.getUsername().isBlank()
+                ? user.getUsername()
+                : String.valueOf(user.getUserId());
     }
 
     /**

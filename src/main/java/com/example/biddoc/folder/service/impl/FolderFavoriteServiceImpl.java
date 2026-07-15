@@ -55,7 +55,7 @@ public class FolderFavoriteServiceImpl implements FolderFavoriteService {
         folderFavoriteMapper.insert(entity);
 
         // 只有真实新增收藏时写审计，避免重复点击产生无意义审计噪声。
-        recordFavoriteAudit(folderId, AuditOperationTypeEnum.FAVORITE, Map.of("folderName", folder.getName()));
+        recordFavoriteAudit(folderId, folder.getName(), AuditOperationTypeEnum.FAVORITE, Map.of("folderName", folder.getName()));
     }
 
     @Override
@@ -74,7 +74,7 @@ public class FolderFavoriteServiceImpl implements FolderFavoriteService {
         folderFavoriteMapper.updateById(existing);
 
         // 只有真实取消收藏时写审计，幂等空操作不写审计。
-        recordFavoriteAudit(folderId, AuditOperationTypeEnum.UNFAVORITE, Map.of("favoriteId", String.valueOf(existing.getId())));
+        recordFavoriteAudit(folderId, folder.getName(), AuditOperationTypeEnum.UNFAVORITE, Map.of("favoriteId", String.valueOf(existing.getId())));
     }
 
     @Override
@@ -148,13 +148,32 @@ public class FolderFavoriteServiceImpl implements FolderFavoriteService {
         return dto;
     }
 
-    private void recordFavoriteAudit(Long folderId, AuditOperationTypeEnum operationType, Map<String, Object> extraData) {
+    private void recordFavoriteAudit(Long folderId, String folderName, AuditOperationTypeEnum operationType, Map<String, Object> extraData) {
         auditService.record(AuditRecordCommand.builder()
                 .moduleCode(AuditModuleCodeEnum.FOLDER.getCode())
                 .bizType("FOLDER")
                 .bizId(folderId)
                 .operationType(operationType.getCode())
+                .objectName(folderName)
+                .actionSummary(favoriteActionSummary(folderName, operationType))
                 .extraData(extraData)
                 .build());
+    }
+
+    private String favoriteActionSummary(String folderName, AuditOperationTypeEnum operationType) {
+        if (AuditOperationTypeEnum.UNFAVORITE == operationType) {
+            return currentActorName() + " 取消收藏文件夹《" + folderName + "》";
+        }
+        return currentActorName() + " 收藏了文件夹《" + folderName + "》";
+    }
+
+    private String currentActorName() {
+        UserContext.UserInfo user = UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return user.getUsername() != null && !user.getUsername().isBlank()
+                ? user.getUsername()
+                : String.valueOf(user.getUserId());
     }
 }

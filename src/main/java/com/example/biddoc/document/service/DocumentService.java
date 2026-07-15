@@ -71,10 +71,11 @@ public interface DocumentService {
      * @param size     每页大小
      * @param sort     排序字段（createdAt/name/size）
      * @param order    排序方向（asc/desc）
+     * @param keyword  文档名称关键词
      * @return 文档列表
      */
     PageResponse<DocumentListItemRespDTO> listDocuments(Long folderId, Integer page, Integer size,
-                                                        String sort, String order);
+                                                        String sort, String order, String keyword);
 
     /**
      * 软删除文档

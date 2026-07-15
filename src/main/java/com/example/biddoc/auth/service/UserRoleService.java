@@ -1,6 +1,7 @@
 package com.example.biddoc.auth.service;
 
 import com.example.biddoc.auth.dto.req.UserRoleAssignReqDTO;
+import com.example.biddoc.auth.dto.resp.RoleSummaryRespDTO;
 import com.example.biddoc.auth.dto.resp.UserRoleRespDTO;
 
 import java.util.List;
@@ -18,6 +19,9 @@ public interface UserRoleService {
 
     /** 查询某角色下的用户ID列表 */
     List<Long> listUserIdsByRoleCode(String roleCode);
+
+    /** 查询系统预定义角色及用户数量 */
+    List<RoleSummaryRespDTO> listRoleSummaries();
 
     /** 获取用户当前生效的角色码列表（考虑状态、删除、有效期） */
     List<String> getActiveRoleCodes(Long userId);

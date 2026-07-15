@@ -2,15 +2,23 @@ package com.example.biddoc.folder.controller;
 
 import com.example.biddoc.common.result.ApiResponse;
 import com.example.biddoc.common.result.PageResponse;
+import com.example.biddoc.document.dto.resp.TagRespDTO;
+import com.example.biddoc.folder.dto.req.FolderAccessRecordReqDTO;
 import com.example.biddoc.folder.dto.req.FolderBatchDeleteReqDTO;
 import com.example.biddoc.folder.dto.req.FolderCopyReqDTO;
 import com.example.biddoc.folder.dto.req.FolderCreateReqDTO;
 import com.example.biddoc.folder.dto.req.FolderMoveReqDTO;
 import com.example.biddoc.folder.dto.req.FolderRenameReqDTO;
+import com.example.biddoc.folder.dto.req.FolderTagBindReqDTO;
 import com.example.biddoc.folder.dto.req.FolderUpdateReqDTO;
+import com.example.biddoc.folder.dto.resp.FolderActionResultRespDTO;
+import com.example.biddoc.folder.dto.resp.FolderBatchOperationRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderDetailRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderPermissionRespDTO;
+import com.example.biddoc.folder.dto.resp.FolderShortcutRespDTO;
+import com.example.biddoc.folder.dto.resp.FolderStatsRespDTO;
 import com.example.biddoc.folder.dto.resp.FolderTreeNodeRespDTO;
+import com.example.biddoc.folder.service.FolderInsightService;
 import com.example.biddoc.folder.service.FolderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +33,7 @@ import java.util.Map;
 public class FolderController {
 
     private final FolderService folderService;
+    private final FolderInsightService folderInsightService;
 
     @PostMapping
     public ApiResponse<Map<String, Long>> create(@Valid @RequestBody FolderCreateReqDTO req) {
@@ -35,6 +44,34 @@ public class FolderController {
     @GetMapping("/{id}")
     public ApiResponse<FolderDetailRespDTO> get(@PathVariable Long id) {
         return ApiResponse.success(folderService.getById(id));
+    }
+
+    @GetMapping("/{id}/detail")
+    public ApiResponse<FolderDetailRespDTO> detail(@PathVariable Long id) {
+        return ApiResponse.success(folderInsightService.getDetail(id));
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<FolderStatsRespDTO> stats() {
+        return ApiResponse.success(folderInsightService.getStats());
+    }
+
+    @GetMapping("/recent")
+    public ApiResponse<List<FolderShortcutRespDTO>> recent(
+            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit) {
+        return ApiResponse.success(folderInsightService.listRecent(limit));
+    }
+
+    @GetMapping("/managed")
+    public ApiResponse<List<FolderShortcutRespDTO>> managed(
+            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit) {
+        return ApiResponse.success(folderInsightService.listManaged(limit));
+    }
+
+    @GetMapping("/owned")
+    public ApiResponse<List<FolderShortcutRespDTO>> owned(
+            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit) {
+        return ApiResponse.success(folderInsightService.listOwned(limit));
     }
 
     @PatchMapping("/{id}/name")
@@ -86,20 +123,36 @@ public class FolderController {
     }
 
     @DeleteMapping("/batch")
-    public ApiResponse<Void> batchDelete(@Valid @RequestBody FolderBatchDeleteReqDTO req) {
-        folderService.batchDelete(req);
-        return ApiResponse.success();
+    public ApiResponse<FolderBatchOperationRespDTO> batchDelete(@Valid @RequestBody FolderBatchDeleteReqDTO req) {
+        return ApiResponse.success(folderService.batchDelete(req));
     }
 
     @PatchMapping("/{id}/move")
-    public ApiResponse<Void> move(@PathVariable Long id, @Valid @RequestBody FolderMoveReqDTO req) {
-        folderService.move(id, req);
-        return ApiResponse.success();
+    public ApiResponse<FolderActionResultRespDTO> move(@PathVariable Long id, @Valid @RequestBody FolderMoveReqDTO req) {
+        return ApiResponse.success(folderService.move(id, req));
     }
 
     @PostMapping("/{id}/copy")
-    public ApiResponse<Map<String, Long>> copy(@PathVariable Long id, @Valid @RequestBody FolderCopyReqDTO req) {
-        Long newRootId = folderService.copy(id, req);
-        return ApiResponse.success(Map.of("id", newRootId));
+    public ApiResponse<FolderActionResultRespDTO> copy(@PathVariable Long id, @Valid @RequestBody FolderCopyReqDTO req) {
+        return ApiResponse.success(folderService.copy(id, req));
+    }
+
+    @PostMapping("/{id}/access")
+    public ApiResponse<Void> recordAccess(@PathVariable Long id,
+                                          @Valid @RequestBody FolderAccessRecordReqDTO req) {
+        folderInsightService.recordAccess(id, req);
+        return ApiResponse.success();
+    }
+
+    @GetMapping("/{id}/tags")
+    public ApiResponse<List<TagRespDTO>> listTags(@PathVariable Long id) {
+        return ApiResponse.success(folderInsightService.listTags(id));
+    }
+
+    @PutMapping("/{id}/tags")
+    public ApiResponse<List<TagRespDTO>> bindTags(@PathVariable Long id,
+                                                  @Valid @RequestBody FolderTagBindReqDTO req) {
+        folderInsightService.bindTags(id, req);
+        return ApiResponse.success(folderInsightService.listTags(id));
     }
 }

@@ -14,8 +14,15 @@ public class AuditLogRespDTO {
     private Long bizId;
     private String operationType;
     private Long operatorUserId;
+    private String operatorName;
     private Long operatorDeptId;
     private String requestId;
+    private String objectName;
+    private String actionSummary;
+    private String relatedBizType;
+    private Long relatedBizId;
+    private String clientIp;
+    private String userAgent;
     private OffsetDateTime operationTime;
     private Map<String, Object> beforeData;
     private Map<String, Object> afterData;

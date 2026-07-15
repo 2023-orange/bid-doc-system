@@ -6,10 +6,14 @@ import com.example.biddoc.audit.constant.AuditModuleCodeEnum;
 import com.example.biddoc.audit.constant.AuditOperationTypeEnum;
 import com.example.biddoc.audit.dto.AuditRecordCommand;
 import com.example.biddoc.audit.service.AuditService;
+import com.example.biddoc.auth.entity.SysUser;
+import com.example.biddoc.auth.mapper.SysUserMapper;
 import com.example.biddoc.common.exception.BusinessException;
 import com.example.biddoc.common.exception.ErrorCode;
 import com.example.biddoc.document.entity.DocumentEntity;
+import com.example.biddoc.document.entity.DocumentUseGrantEntity;
 import com.example.biddoc.document.mapper.DocumentMapper;
+import com.example.biddoc.document.mapper.DocumentUseGrantMapper;
 import com.example.biddoc.notify.service.NotificationService;
 import com.example.biddoc.project.constant.ChecklistItemStatusEnum;
 import com.example.biddoc.project.constant.ProjectStatusEnum;
@@ -30,8 +34,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -44,6 +50,8 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
     private final ProjectChecklistDocumentMapper checklistDocumentMapper;
     private final ProjectMapper projectMapper;
     private final DocumentMapper documentMapper;
+    private final DocumentUseGrantMapper documentUseGrantMapper;
+    private final SysUserMapper sysUserMapper;
     private final ProjectPermissionService projectPermissionService;
     private final AuditService auditService;
     private final NotificationService notificationService;
@@ -101,6 +109,7 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         }
         projectPermissionService.checkManage(projectId);
         ensureProjectEditable(projectId);
+        validateAssignableUser(ownerUserId, "清单负责人");
         ProjectChecklistItemEntity update = new ProjectChecklistItemEntity();
         update.setId(itemId);
         update.setOwnerUserId(ownerUserId);
@@ -114,6 +123,10 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
                 .bizType("CHECKLIST_ITEM")
                 .bizId(itemId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(checklistObjectName(projectId, item))
+                .actionSummary(currentActorName() + " 调整了清单项《" + item.getItemName() + "》负责人")
+                .relatedBizType("PROJECT")
+                .relatedBizId(projectId)
                 .afterData(afterData)
                 .build());
         if (ownerUserId != null) {
@@ -141,6 +154,8 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
         if (isExpired(document)) {
             throw new BusinessException(ErrorCode.DOCUMENT_EXPIRED);
         }
+        validateChecklistBindingRules(item, document);
+        validateSensitiveBindingGrant(document, versionNo != null ? versionNo : document.getCurrentVersionNo());
 
         ProjectChecklistDocumentEntity binding = new ProjectChecklistDocumentEntity();
         binding.setId(IdWorker.getId());
@@ -157,6 +172,10 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
                 .bizType("CHECKLIST_ITEM")
                 .bizId(itemId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(checklistObjectName(projectId, item))
+                .actionSummary(currentActorName() + " 绑定资料《" + document.getName() + "》到清单项《" + item.getItemName() + "》")
+                .relatedBizType("PROJECT")
+                .relatedBizId(projectId)
                 .afterData(Map.of("bindDocumentId", documentId, "versionNo", binding.getVersionNo()))
                 .build());
         notifyChecklistOwner(item, "CHECKLIST_DOCUMENT_BIND", "清单项已绑定资料");
@@ -177,12 +196,18 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
                 .eq(ProjectChecklistDocumentEntity::getChecklistItemId, itemId)
                 .eq(ProjectChecklistDocumentEntity::getDocumentId, documentId)
                 .eq(ProjectChecklistDocumentEntity::getDeleted, false));
+        DocumentEntity document = documentMapper.selectById(documentId);
         recalculateItemStatus(itemId);
         auditService.record(AuditRecordCommand.builder()
                 .moduleCode(AuditModuleCodeEnum.PROJECT.getCode())
                 .bizType("CHECKLIST_ITEM")
                 .bizId(itemId)
                 .operationType(AuditOperationTypeEnum.UPDATE.getCode())
+                .objectName(checklistObjectName(projectId, item))
+                .actionSummary(currentActorName() + " 从清单项《" + item.getItemName() + "》解绑资料《"
+                        + (document != null ? document.getName() : String.valueOf(documentId)) + "》")
+                .relatedBizType("PROJECT")
+                .relatedBizId(projectId)
                 .afterData(Map.of("unbindDocumentId", documentId))
                 .build());
         notifyChecklistOwner(item, "CHECKLIST_DOCUMENT_UNBIND", "清单项已解绑资料");
@@ -256,11 +281,153 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
                 && document.getExpireDate().isBefore(OffsetDateTime.now());
     }
 
+    private void validateChecklistBindingRules(ProjectChecklistItemEntity item, DocumentEntity document) {
+        // 清单模板约束必须在绑定前统一执行，避免绕过来源、格式和数量规则造成项目归档口径失真。
+        validateAllowedSource(item, document);
+        validateAllowedFileTypes(item, document);
+        validateMaxCount(item);
+    }
+
+    private void validateAllowedSource(ProjectChecklistItemEntity item, DocumentEntity document) {
+        List<String> allowedSources = splitRuleValues(item.getAllowedSource()).stream()
+                .map(this::normalizeSourceRule)
+                .toList();
+        if (allowedSources.isEmpty()
+                || allowedSources.contains("BOTH")
+                || allowedSources.contains("ALL")) {
+            return;
+        }
+        String documentSource = normalizeSourceRule(document.getSourceType());
+        if (!allowedSources.contains(documentSource)) {
+            throw new BusinessException(ErrorCode.BUSINESS_ILLEGAL, "资料来源不符合清单要求");
+        }
+    }
+
+    private void validateAllowedFileTypes(ProjectChecklistItemEntity item, DocumentEntity document) {
+        List<String> allowedTypes = splitRuleValues(item.getAllowedFileTypes()).stream()
+                .map(type -> type.toLowerCase(Locale.ROOT))
+                .toList();
+        if (allowedTypes.isEmpty()) {
+            return;
+        }
+        String latestMime = document.getLatestMime() == null
+                ? ""
+                : document.getLatestMime().trim().toLowerCase(Locale.ROOT);
+        if (latestMime.isEmpty()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ILLEGAL, "资料文件类型不符合清单要求");
+        }
+        boolean matched = allowedTypes.stream().anyMatch(allowed -> matchesFileType(allowed, latestMime));
+        if (!matched) {
+            throw new BusinessException(ErrorCode.BUSINESS_ILLEGAL, "资料文件类型不符合清单要求");
+        }
+    }
+
+    private void validateMaxCount(ProjectChecklistItemEntity item) {
+        if (item.getMaxCount() == null || item.getMaxCount() <= 0) {
+            return;
+        }
+        long boundCount = checklistDocumentMapper.selectCount(new LambdaQueryWrapper<ProjectChecklistDocumentEntity>()
+                .eq(ProjectChecklistDocumentEntity::getChecklistItemId, item.getId())
+                .eq(ProjectChecklistDocumentEntity::getDeleted, false));
+        if (boundCount >= item.getMaxCount()) {
+            throw new BusinessException(ErrorCode.BUSINESS_ILLEGAL, "清单项绑定资料数量已达上限");
+        }
+    }
+
+    private void validateSensitiveBindingGrant(DocumentEntity document, Integer versionNo) {
+        String level = document.getSensitiveLevel();
+        if (!"SENSITIVE".equalsIgnoreCase(level) && !"SECRET".equalsIgnoreCase(level)) {
+            return;
+        }
+        com.example.biddoc.common.constant.UserContext.UserInfo currentUser =
+                com.example.biddoc.common.constant.UserContext.get();
+        boolean privileged = currentUser != null
+                && (currentUser.isSuperAdmin() || document.getOwnerUserId() != null
+                && document.getOwnerUserId().equals(currentUser.getUserId()));
+        if (privileged) {
+            return;
+        }
+        if (currentUser == null || versionNo == null || !hasActiveUseGrant(document.getId(), versionNo, currentUser.getUserId())) {
+            throw new BusinessException(ErrorCode.DOCUMENT_SENSITIVE_ACCESS_DENIED);
+        }
+    }
+
+    private boolean hasActiveUseGrant(Long documentId, Integer versionNo, Long granteeId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        Long count = documentUseGrantMapper.selectCount(new LambdaQueryWrapper<DocumentUseGrantEntity>()
+                .eq(DocumentUseGrantEntity::getDocumentId, documentId)
+                .eq(DocumentUseGrantEntity::getVersionNo, versionNo)
+                .eq(DocumentUseGrantEntity::getGranteeId, granteeId)
+                .in(DocumentUseGrantEntity::getStatus, List.of("ACTIVE", "APPROVED"))
+                .eq(DocumentUseGrantEntity::getDeleted, false)
+                .and(wrapper -> wrapper.isNull(DocumentUseGrantEntity::getValidFrom)
+                        .or()
+                        .le(DocumentUseGrantEntity::getValidFrom, now))
+                .and(wrapper -> wrapper.isNull(DocumentUseGrantEntity::getValidUntil)
+                        .or()
+                        .ge(DocumentUseGrantEntity::getValidUntil, now)));
+        return count != null && count > 0;
+    }
+
+    private boolean matchesFileType(String allowed, String latestMime) {
+        if (allowed == null || allowed.isBlank()) {
+            return false;
+        }
+        String normalized = allowed.startsWith(".") ? allowed.substring(1) : allowed;
+        if (latestMime.equals(normalized)) {
+            return true;
+        }
+        int slashIndex = latestMime.indexOf('/');
+        return slashIndex >= 0 && latestMime.substring(slashIndex + 1).equals(normalized);
+    }
+
+    private String normalizeSourceRule(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "通用资料库", "COMMON", "COMMON_LIBRARY" -> "COMMON_LIBRARY";
+            case "项目上传", "PROJECT", "PROJECT_UPLOAD" -> "PROJECT_UPLOAD";
+            case "两者均可", "全部", "BOTH", "ALL" -> "BOTH";
+            default -> normalized;
+        };
+    }
+
+    private List<String> splitRuleValues(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split("[,，;；\\s]+"))
+                .map(String::trim)
+                .filter(token -> !token.isEmpty())
+                .toList();
+    }
+
     private void notifyChecklistOwner(ProjectChecklistItemEntity item, String type, String title) {
         if (item.getOwnerUserId() != null) {
             notificationService.send(item.getOwnerUserId(), type, title,
                     "清单项：" + item.getItemName(), "CHECKLIST_ITEM", item.getId());
         }
+    }
+
+    private String checklistObjectName(Long projectId, ProjectChecklistItemEntity item) {
+        ProjectEntity project = projectMapper.selectById(projectId);
+        if (project != null && project.getProjectName() != null && !project.getProjectName().isBlank()) {
+            return project.getProjectName() + " / " + item.getItemName();
+        }
+        return item.getItemName();
+    }
+
+    private String currentActorName() {
+        com.example.biddoc.common.constant.UserContext.UserInfo user =
+                com.example.biddoc.common.constant.UserContext.get();
+        if (user == null) {
+            return "系统";
+        }
+        return user.getUsername() != null && !user.getUsername().isBlank()
+                ? user.getUsername()
+                : String.valueOf(user.getUserId());
     }
 
     private ProjectChecklistItemEntity requireItem(Long itemId) {
@@ -269,6 +436,17 @@ public class ProjectChecklistServiceImpl implements ProjectChecklistService {
             throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "清单项不存在");
         }
         return item;
+    }
+
+    private void validateAssignableUser(Long userId, String roleName) {
+        if (userId == null) {
+            return;
+        }
+        SysUser user = sysUserMapper.selectById(userId);
+        // 清单负责人后续可维护清单资料，必须拒绝停用或已删除账号，防止任务落到不可处理用户。
+        if (user == null || Boolean.TRUE.equals(user.getDeleted()) || !Integer.valueOf(1).equals(user.getStatus())) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED, roleName + "账号不可用");
+        }
     }
 
     private void ensureProjectEditable(Long projectId) {

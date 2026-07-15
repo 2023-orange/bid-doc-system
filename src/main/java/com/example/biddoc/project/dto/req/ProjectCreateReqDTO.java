@@ -19,6 +19,7 @@ public class ProjectCreateReqDTO {
     private String projectType;
     private OffsetDateTime bidDeadline;
     private Long folderId;
+    private String remark;
     private List<Long> ownerUserIds = new ArrayList<>();
     private List<Long> materialOwnerUserIds = new ArrayList<>();
     private List<Long> memberUserIds = new ArrayList<>();

@@ -2,6 +2,7 @@ package com.example.biddoc.auth.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.example.biddoc.auth.dto.req.UserRoleAssignReqDTO;
+import com.example.biddoc.auth.dto.resp.RoleSummaryRespDTO;
 import com.example.biddoc.auth.dto.resp.UserRoleRespDTO;
 import com.example.biddoc.auth.service.UserRoleService;
 import com.example.biddoc.common.result.ApiResponse;
@@ -17,6 +18,15 @@ import java.util.List;
 public class RoleController {
 
     private final UserRoleService userRoleService;
+
+    /**
+     * 查询角色管理列表（仅 SUPER_ADMIN 可操作）
+     */
+    @SaCheckRole("SUPER_ADMIN")
+    @GetMapping
+    public ApiResponse<List<RoleSummaryRespDTO>> list() {
+        return ApiResponse.success(userRoleService.listRoleSummaries());
+    }
 
     /**
      * 为用户分配角色（仅 SUPER_ADMIN 可操作）

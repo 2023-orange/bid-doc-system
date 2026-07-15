@@ -49,9 +49,9 @@
 
 ✅ **已实现并可用**：
 - **认证模块**：登录 / 注册 / 退出 / 当前用户
-- **用户模块**：详情 / 启用禁用
+- **用户模块**：详情 / 用户选择器 / 启用禁用
 - **角色模块**：分配 / 撤销 / 查询
-- **部门模块**：创建 / 列表
+- **部门模块**：创建 / 管理树 / 编辑 / 启用禁用 / 删除空部门
 - **文件夹模块**：CRUD / 删除 / 批量删除 / 移动 / 复制 / 授权管理 / 管理员管理
 - **文件夹收藏**：收藏 / 取消收藏 / 我的收藏
 - **审计模块**：审计日志分页查询（SUPER_ADMIN）
@@ -320,7 +320,46 @@ POST /api/v1/auth/logout
 
 ## 5. 用户接口 `/api/v1/users`
 
-### 5.1 查询用户详情
+### 5.1 查询用户选择器选项
+
+```
+GET /api/v1/users/options?keyword=&deptId=&status=&size=
+```
+
+用于负责人、成员等人员选择器。返回轻量字段，前端不需要让用户输入 id。
+
+**查询参数**
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| keyword | string | 否 | 按姓名或用户名模糊搜索 |
+| deptId | string\|number | 否 | 限定部门 |
+| status | int | 否 | `1` 启用 / `0` 禁用；负责人选择建议传 `1` |
+| size | int | 否 | 返回数量，默认 `20`，最大 `50` |
+
+**响应**
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "id": "2058217227220389889",
+      "realName": "张三",
+      "username": "alice",
+      "deptId": "2058217226998091777",
+      "deptName": "研发部",
+      "status": 1
+    }
+  ],
+  "timestamp": 1779552230324
+}
+```
+
+---
+
+### 5.2 查询用户详情
 
 ```
 GET /api/v1/users/{id}
@@ -330,7 +369,7 @@ GET /api/v1/users/{id}
 
 ---
 
-### 5.2 启用 / 禁用用户
+### 5.3 启用 / 禁用用户
 
 ```
 PATCH /api/v1/users/{id}/status
@@ -451,8 +490,10 @@ POST /api/v1/departments
 ```json
 {
   "name": "研发部",
-  "parentId": 1,
-  "level": 2,
+  "parentId": null,
+  "sortOrder": 10,
+  "managerUserId": null,
+  "status": 1,
   "remark": "技术中心下属研发部门"
 }
 ```
@@ -460,15 +501,19 @@ POST /api/v1/departments
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | name | string | 是 | 非空 |
-| parentId | string\|number | 是 | 顶级部门传 `1`（默认 root） |
-| level | int | 是 | 仅允许 `1` 或 `2` |
+| parentId | string\|number\|null | 否 | 一级部门传 `null`；子部门传父级部门 id |
+| sortOrder | int | 否 | 同级排序，默认 `0` |
+| managerUserId | string\|number | 否 | 部门负责人用户 id |
+| status | int | 否 | `1` 启用 / `0` 禁用，默认 `1` |
 | remark | string | 否 | — |
+
+后端根据 `parentId` 自动计算 `level`，最多支持 5 级部门树。
 
 **响应**：`code=0, data=null`。
 
 ---
 
-### 7.2 查询部门列表（平铺）
+### 7.2 查询部门管理树
 
 ```
 GET /api/v1/departments
@@ -484,23 +529,74 @@ GET /api/v1/departments
     {
       "id": "2058217226998091777",
       "name": "研发部",
-      "parentId": "1",
-      "level": 2,
+      "parentId": null,
+      "parentName": null,
+      "level": 1,
+      "sortOrder": 10,
       "managerUserId": null,
       "status": 1,
       "remark": "...",
       "createdAt": "2026-05-24T00:03:20.123456Z",
-      "createdBy": "1",
       "updatedAt": "2026-05-24T00:03:20.123456Z",
-      "updatedBy": "1",
-      "extensionData": null
+      "hasChildren": true,
+      "memberCount": 15,
+      "projectCount": 3,
+      "children": []
     }
   ],
   "timestamp": 1779552230324
 }
 ```
 
-> 当前为平铺列表，未构造树形结构。前端如需树，自行按 `parentId` 组装。
+前端应直接使用后端返回的树结构和 `status` 字段，不要自行从缺失字段推断启用状态。
+
+新增统计字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| memberCount | int | 部门直属启用用户数；只统计 `sys_user.dept_id = department.id`、`status = 1`、`deleted = false` 的用户，不包含子部门用户 |
+| projectCount | int | 部门进行中项目数；只统计 `bid_project.owner_dept_id = department.id`、`project_status = NORMAL`、`deleted = false` 的项目 |
+
+前端提示建议：当前项目状态共有 `NORMAL`（正常）、`PAUSED`（暂停）、`ARCHIVED`（归档）、`CANCELLED`（取消）、`DELETED`（删除）五种；部门树里的 `projectCount` 只会把状态为 `NORMAL` 且未删除的项目计入“进行中项目数”，其它状态不计入。
+
+---
+
+### 7.3 编辑部门
+
+```
+PUT /api/v1/departments/{id}
+```
+
+支持修改名称、父级、排序、负责人、状态和备注。后端会阻止移动到自身或下级部门，并校验移动后整棵子树不超过 5 级。
+
+**响应**：`code=0, data=null`。
+
+---
+
+### 7.4 启用 / 禁用部门
+
+```
+PATCH /api/v1/departments/{id}/status
+```
+
+```json
+{
+  "status": 0,
+  "cascadeDeptIds": ["2058217226998091778"]
+}
+```
+
+`cascadeDeptIds` 为空表示只处理当前部门；禁用非叶子部门时，前端建议弹窗展示下级部门供管理员选择是否连带禁用。
+
+---
+
+### 7.5 删除空部门
+
+```
+DELETE /api/v1/departments/{id}
+```
+
+仅超级管理员可删除。只允许删除无子部门、无用户、无项目、无资料、无文件夹、无审批流程引用的空部门；否则应改用禁用。
 
 ---
 
@@ -2295,7 +2391,8 @@ const fetchData = async (page: number, size: number) => {
 - `GET /api/v1/auth/me` - 获取当前用户
 - `POST /api/v1/auth/logout` - 退出登录
 
-### 用户模块 (2)
+### 用户模块 (3)
+- `GET /api/v1/users/options` - 查询用户选择器选项
 - `GET /api/v1/users/{id}` - 查询用户详情
 - `PATCH /api/v1/users/{id}/status` - 启用/禁用用户
 
@@ -2305,9 +2402,12 @@ const fetchData = async (page: number, size: number) => {
 - `GET /api/v1/roles/user/{userId}` - 查询用户角色列表
 - `GET /api/v1/roles/code/{roleCode}/users` - 查询角色下的用户
 
-### 部门模块 (2)
+### 部门模块 (5)
 - `POST /api/v1/departments` - 创建部门
-- `GET /api/v1/departments` - 查询部门列表
+- `GET /api/v1/departments` - 查询部门管理树
+- `PUT /api/v1/departments/{id}` - 编辑部门
+- `PATCH /api/v1/departments/{id}/status` - 启用/禁用部门
+- `DELETE /api/v1/departments/{id}` - 删除空部门
 
 ### 文件夹模块 (10)
 - `POST /api/v1/folders` - 创建文件夹

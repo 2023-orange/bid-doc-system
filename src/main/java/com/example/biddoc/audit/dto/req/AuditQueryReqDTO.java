@@ -13,6 +13,9 @@ public class AuditQueryReqDTO {
     private String operationType;
     private Long operatorUserId;
     private Long operatorDeptId;
+    private String relatedBizType;
+    private Long relatedBizId;
+    private String keyword;
     private OffsetDateTime startTime;
     private OffsetDateTime endTime;
     private Integer page = 1;

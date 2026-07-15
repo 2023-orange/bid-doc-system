@@ -25,6 +25,12 @@ public class AuditOperationLogEntity {
     private Long operatorUserId;
     private Long operatorDeptId;
     private String requestId;
+    private String objectName;
+    private String actionSummary;
+    private String relatedBizType;
+    private Long relatedBizId;
+    private String clientIp;
+    private String userAgent;
     private OffsetDateTime operationTime;
 
     @TableField(typeHandler = JacksonTypeHandler.class)
